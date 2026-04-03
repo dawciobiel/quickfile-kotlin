@@ -107,6 +107,12 @@ Notes:
 - Providers and operation plugins should treat unknown events as ignorable.
 - If a plugin needs richer host state, prefer explicit RPC queries over adding many event types.
 
+### Plugin → host reporting (recommended)
+
+For progress and logs related to a concrete operation (e.g., archiving, copy/move/delete/rename), prefer **per-job streams** (RPC returns/opens a stream for that job).
+
+If the plugin must report events that are not tied to a single job (e.g., provider connectivity, auth/session expiry, health), use a **dedicated plugin → host event stream** with the same event envelope (`type`, `schemaVersion`, `payload`).
+
 ### Evolution rules (recommended)
 
 - Adding new optional fields is backward compatible.

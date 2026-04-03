@@ -10,6 +10,9 @@ This folder contains documentation that describes the architecture and the major
 `modules/`
 : Module and layer structure (what belongs where, responsibilities).
 
+`plugin-api/`
+: Public plugin API contracts (capabilities, envelopes, versioning).
+
 `domain/`
 : Domain concepts, core models, and domain rules.
 

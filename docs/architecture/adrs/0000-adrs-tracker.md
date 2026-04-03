@@ -7,6 +7,7 @@ This file lists the architectural decisions we plan to document. Each decision g
 1. `0001-v1-scope.md` - MVP scope for filesystem and UX
 2. `0002-plugin-model.md` - plugin capabilities and runtime/loading model
 3. `0003-architecture-overview.md` - overall architecture style and state flow
+4. `0004-ipc-transport.md` - IPC/RPC transport between host and plugin processes
 
 ## Status
 

@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package quickfile.pluginapi.v1;
+
+option java_multiple_files = true;
+
+// Negotiated during PluginControl.Handshake.
+message ApiVersion {
+  int32 major = 1;
+  int32 minor = 2;
+}
+
+// Matches the logical event envelope (see plugin-api README).
+message EventEnvelope {
+  string type = 1;
+  int32 schema_version = 2;
+  bytes payload = 3;
+}
+
+message JobId {
+  string value = 1;
+}
+
+// Opaque reference to a browsable location within a source (path, URI, drive id, etc.).
+message LocationRef {
+  bytes opaque = 1;
+}
+
+enum EntryKind {
+  ENTRY_KIND_UNSPECIFIED = 0;
+  ENTRY_KIND_FILE = 1;
+  ENTRY_KIND_DIRECTORY = 2;
+  ENTRY_KIND_SYMLINK = 3;
+}
+
+message Entry {
+  string name = 1;
+  EntryKind kind = 2;
+  int64 size_bytes = 3;
+  // Unix epoch millis; 0 if unknown.
+  int64 modified_time_ms = 4;
+  LocationRef child_location = 5;
+}

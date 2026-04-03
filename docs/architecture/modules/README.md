@@ -14,6 +14,17 @@ This document proposes the Gradle module boundaries for the project, aligned wit
 
 ## Proposed modules (high-level)
 
+## Dependency rules (recommended)
+
+Keep module dependencies unidirectional:
+
+- `:plugin-api` has **no** dependency on any host modules.
+- `:core` may depend on `:plugin-api` (types/envelopes), but must not depend on UI.
+- `:plugin-runtime` depends on `:plugin-api` and `:core`.
+- `:app-ui` depends on `:core`, `:plugin-runtime`, and `:plugin-api`.
+
+This keeps the public API stable and prevents UI/runtime details from leaking into the contracts.
+
 ### API & contracts (public, versioned)
 
 - `:plugin-api`

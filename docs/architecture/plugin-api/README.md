@@ -60,6 +60,53 @@ To keep compatibility manageable, events are transported via a **versioned envel
 - `schemaVersion`: integer schema version for the payload
 - `payload`: structured data for that `type` and version
 
+### Event naming conventions
+
+- Use dot-separated, lower-case identifiers: `area.topic.verb`
+- Prefer stable nouns and verbs: `panel.active.changed`, `selection.changed`
+- Use plural domains for streams: `jobs.*`, `transfers.*`
+- Avoid embedding UI widget details (keep it conceptual)
+
+### Stability levels (recommended)
+
+- **stable**: safe for third-party plugins; backward-compatible evolution rules apply
+- **experimental**: may change without notice; plugins should opt-in explicitly
+
+### Minimal stable event types (v1)
+
+Keep v1 small. Suggested initial stable set:
+
+- `app.lifecycle.changed`
+  - emitted on startup/shutdown, plugin load/unload, major mode changes
+
+- `panel.active.changed`
+  - active panel changed (e.g., left/right, focused pane)
+
+- `panel.location.changed`
+  - a panel navigated to a new location within a source/provider
+
+- `selection.changed`
+  - selection changed within a panel
+
+- `job.created`
+  - a job was created (copy/move/delete/rename)
+
+- `job.progress`
+  - progress updates for a job (bytes/items done, total, current phase)
+
+- `job.status.changed`
+  - job transitioned between states (queued/running/paused/completed/failed/cancelled)
+
+- `job.log`
+  - structured log entries associated with a job (for UI "Transfers" and diagnostics)
+
+- `notifications.toast`
+  - non-blocking user notification requests (host decides how to display)
+
+Notes:
+- Providers and operation plugins should treat unknown events as ignorable.
+- If a plugin needs richer host state, prefer explicit RPC queries over adding many event types.
+
 ### Evolution rules (recommended)
 
 - Adding new optional fields is backward compatible.

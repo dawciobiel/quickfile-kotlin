@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package quickfile.pluginapi.v1;
+
+import "common.proto";
+
+option java_multiple_files = true;
+
+message HandshakeRequest {
+  ApiVersion client_api_version = 1;
+  string plugin_id = 2;
+  string plugin_version = 3;
+}
+
+message HandshakeResponse {
+  ApiVersion negotiated_api_version = 1;
+  string session_token = 2;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_OK = 1;
+    STATUS_NOT_READY = 2;
+  }
+  Status status = 1;
+}
+
+service PluginControl {
+  rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}

@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package quickfile.pluginapi.v1;
+
+import "common.proto";
+
+option java_multiple_files = true;
+
+enum OperationKind {
+  OPERATION_KIND_UNSPECIFIED = 0;
+  OPERATION_KIND_COPY = 1;
+  OPERATION_KIND_MOVE = 2;
+  OPERATION_KIND_DELETE = 3;
+  OPERATION_KIND_RENAME = 4;
+  OPERATION_KIND_ARCHIVE = 5;
+}
+
+message StartOperationRequest {
+  JobId job_id = 1;
+  OperationKind kind = 2;
+  repeated LocationRef sources = 3;
+  LocationRef target = 4;
+  // Operation-specific options (compression level, overwrite policy hints, etc.).
+  bytes options_json = 5;
+}
+
+message JobProgress {
+  int64 done_units = 1;
+  int64 total_units = 2;
+  string phase = 3;
+  string current_item_name = 4;
+}
+
+message JobLogLine {
+  string line = 1;
+  enum Level {
+    LEVEL_UNSPECIFIED = 0;
+    LEVEL_INFO = 1;
+    LEVEL_WARN = 2;
+    LEVEL_ERROR = 3;
+  }
+  Level level = 2;
+}
+
+message JobStatusChanged {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_QUEUED = 1;
+    STATUS_RUNNING = 2;
+    STATUS_PAUSED = 3;
+    STATUS_COMPLETED = 4;
+    STATUS_FAILED = 5;
+    STATUS_CANCELLED = 6;
+  }
+  Status status = 1;
+  string message = 2;
+}
+
+message JobUpdate {
+  JobId job_id = 1;
+  oneof body {
+    JobProgress progress = 2;
+    JobLogLine log = 3;
+    JobStatusChanged status = 4;
+  }
+}
+
+message CancelOperationRequest {
+  JobId job_id = 1;
+}
+
+message CancelOperationResponse {
+  bool accepted = 1;
+}
+
+service FileOperations {
+  rpc StartOperation(StartOperationRequest) returns (stream JobUpdate);
+  rpc CancelOperation(CancelOperationRequest) returns (CancelOperationResponse);
+}

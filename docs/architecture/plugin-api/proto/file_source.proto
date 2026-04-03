@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package quickfile.pluginapi.v1;
+
+import "common.proto";
+
+option java_multiple_files = true;
+
+message ListEntriesRequest {
+  LocationRef location = 1;
+  // Optional pagination token from previous response.
+  bytes page_token = 2;
+}
+
+message ListEntriesResponse {
+  repeated Entry entries = 1;
+  bytes next_page_token = 2;
+}
+
+service FileSource {
+  rpc ListEntries(ListEntriesRequest) returns (ListEntriesResponse);
+}

@@ -2,6 +2,13 @@
 
 This document describes the minimal public contracts exposed to plugins. It complements ADR `0002-plugin-model` and ADR `0003-architecture-overview`.
 
+For a **gRPC/protobuf sketch** (services, messages, mapping to flows), see:
+
+- `grpc-contracts.md`
+- `proto/` (draft `.proto` files)
+
+IPC transport choice is recorded in ADR `0004-ipc-transport` (**gRPC over localhost TCP**).
+
 ## Design principles
 
 - The API is **versioned** and must evolve with backward compatibility in mind.
@@ -131,7 +138,7 @@ The host may:
 
 ## Open questions (to be resolved before implementation)
 
-- Transport choice for IPC/RPC (e.g., JSON over stdin/stdout, gRPC, custom protocol)
 - Plugin packaging and distribution model (local folder, registry, signed artifacts)
 - Permission model and optional OS sandboxing (future ADR)
+- Final shape of host→plugin event delivery (unary `SendHostEvent` vs client streaming)
 

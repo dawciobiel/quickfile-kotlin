@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package quickfile.pluginapi.v1;
+
+import "common.proto";
+
+option java_multiple_files = true;
+
+message SubscribePluginEventsRequest {
+  // Optional filter: limit to types with this prefix (e.g. "provider.").
+  string type_prefix = 1;
+}
+
+message SendHostEventRequest {
+  EventEnvelope event = 1;
+}
+
+message SendHostEventResponse {
+  bool accepted = 1;
+}
+
+// Plugin-originated events (connectivity, auth expiry, diagnostics) not tied to a single job stream.
+service PluginEvents {
+  rpc SubscribePluginEvents(SubscribePluginEventsRequest) returns (stream EventEnvelope);
+}
+
+// Host-originated events delivered to the plugin (logical event bus).
+service HostEventIngest {
+  rpc SendHostEvent(SendHostEventRequest) returns (SendHostEventResponse);
+}

@@ -16,6 +16,11 @@ enum OperationKind {
 }
 
 message StartOperationRequest {
+  // Job identifier for correlating updates across systems.
+  //
+  // Contract:
+  // - The initiating side MUST provide a value that is unique at least within the current session.
+  // - The host MUST echo this id back in every JobUpdate.job_id for this operation.
   JobId job_id = 1;
   OperationKind kind = 2;
   repeated LocationRef sources = 3;
@@ -48,11 +53,17 @@ message JobStatusChanged {
     STATUS_QUEUED = 1;
     STATUS_RUNNING = 2;
     STATUS_PAUSED = 3;
+    // Terminal status: the operation finished successfully.
     STATUS_COMPLETED = 4;
+    // Terminal status: the operation finished with an error.
     STATUS_FAILED = 5;
+    // Terminal status: the operation was cancelled (e.g. by user request).
+    // Cancellation is always final; after this status no further updates will be emitted.
     STATUS_CANCELLED = 6;
   }
+  // Current job status. Terminal statuses are: COMPLETED, FAILED, CANCELLED.
   Status status = 1;
+  // Optional human-readable message (best-effort). Not intended for programmatic parsing.
   string message = 2;
 }
 
@@ -70,10 +81,24 @@ message CancelOperationRequest {
 }
 
 message CancelOperationResponse {
+  // True if the host accepted the cancellation request for processing.
+  //
+  // Contract:
+  // - accepted=true means the host will attempt to cancel the job.
+  // - If the job is still active, the job's StartOperation stream will eventually emit
+  //   JobStatusChanged with status=CANCELLED and then end normally.
+  // - accepted=false means the cancellation request could not be applied (e.g. unknown job id,
+  //   job already terminal, or job is not cancellable).
   bool accepted = 1;
 }
 
 service FileOperations {
+  // Starts a long-running operation and returns a stream of updates.
+  //
+  // Stream contract:
+  // - The stream may emit progress/log/status updates in any order.
+  // - Exactly one terminal status MUST be emitted: COMPLETED, FAILED, or CANCELLED.
+  // - After the terminal status is emitted, the server MUST close the stream normally.
   rpc StartOperation(StartOperationRequest) returns (stream JobUpdate);
   rpc CancelOperation(CancelOperationRequest) returns (CancelOperationResponse);
 }

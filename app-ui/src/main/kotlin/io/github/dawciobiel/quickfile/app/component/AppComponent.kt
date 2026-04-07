@@ -56,6 +56,7 @@ class DefaultAppComponent(
         DefaultJobsComponent(
             componentContext = childContext(key = "jobs"),
             jobRegistry = jobRegistry,
+            fileOperationsGateway = pluginRuntimeFacade.fileOperationsGateway,
         )
 
     override val settings: SettingsComponent =
@@ -76,7 +77,11 @@ class DefaultAppComponent(
 
         jobs.launchCopyJob(
             entryName = selectedEntry.name,
-            sourceLocation = sourceState.currentLocation,
+            sourceLocation =
+                selectedEntry.childLocation
+                    ?: sourceState.currentLocation.let { currentLocation ->
+                        Path.of(currentLocation).resolve(selectedEntry.name).toString()
+                    },
             destinationLocation = targetState.currentLocation,
         )
     }

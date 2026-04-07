@@ -13,6 +13,7 @@ fun main() {
             .forPort(0)
             .addService(LocalFsPluginControlService(pluginId = PLUGIN_ID, pluginVersion = PLUGIN_VERSION))
             .addService(LocalFsFileSourceService())
+            .addService(LocalFsFileOperationsService())
             .build()
             .start()
 

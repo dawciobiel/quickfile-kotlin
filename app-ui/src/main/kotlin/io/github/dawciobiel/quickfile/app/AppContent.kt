@@ -47,6 +47,8 @@ import io.github.dawciobiel.quickfile.core.jobs.JobStatus
 import io.github.dawciobiel.quickfile.core.panel.PanelEntry
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
 import io.github.dawciobiel.quickfile.core.panel.PanelIntent
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun AppContent(component: AppComponent) {
@@ -472,6 +474,7 @@ private fun JobRow(
     job: JobSnapshot,
     onCancel: () -> Unit,
 ) {
+    var expanded by remember(job.jobId) { mutableStateOf(false) }
     val statusColor =
         when (job.status) {
             JobStatus.COMPLETED -> Color(0xFF067647)
@@ -487,54 +490,122 @@ private fun JobRow(
             Modifier
                 .fillMaxWidth()
                 .background(Color(0xFFF9FAFB))
+                .clickable { expanded = !expanded }
                 .padding(10.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    text = "${job.kind} · ${job.status}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = statusColor,
-                    fontWeight = FontWeight.Bold,
-                )
-                job.progress?.let { progress ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Text(
-                        text = "Progress: ${progress.completedUnits}/${progress.totalUnits} ${progress.details.orEmpty()}",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "${job.kind} · ${job.status}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = statusColor,
+                        fontWeight = FontWeight.Bold,
                     )
-                }
-                job.recentLogLines.lastOrNull()?.let { logLine ->
                     Text(
-                        text = logLine.message,
+                        text = buildJobSummaryLine(job),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    job.recentLogLines.lastOrNull()?.let { logLine ->
+                        Text(
+                            text = logLine.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = if (expanded) Int.MAX_VALUE else 1,
+                            overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+                        )
+                    }
+                    job.errorMessage?.let { error ->
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFB42318),
+                        )
+                    }
+                }
+                if (job.status == JobStatus.RUNNING || job.status == JobStatus.PENDING) {
+                    OutlinedButton(onClick = onCancel) {
+                        Text("Cancel")
+                    }
+                } else if (job.status == JobStatus.CANCELLING) {
+                    Text(
+                        text = "Cancelling...",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                job.errorMessage?.let { error ->
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFB42318),
-                    )
-                }
             }
-            if (job.status == JobStatus.RUNNING || job.status == JobStatus.PENDING) {
-                OutlinedButton(onClick = onCancel) {
-                    Text("Cancel")
+
+            if (expanded) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFFFFFFF))
+                            .border(width = 1.dp, color = Color(0xFFE5E7EB))
+                            .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "Job ID: ${job.jobId}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Created: ${job.createdAt.formatForUi()} | Updated: ${job.updatedAt.formatForUi()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    job.progress?.let { progress ->
+                        Text(
+                            text = "Progress: ${progress.completedUnits}/${progress.totalUnits} ${progress.details.orEmpty()}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Text(
+                        text = "Recent log lines",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (job.recentLogLines.isEmpty()) {
+                        Text(
+                            text = "No log lines recorded yet.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        job.recentLogLines.takeLast(8).forEach { logLine ->
+                            Text(
+                                text = "${logLine.timestamp.formatForUi()}  ${logLine.message}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
-            } else if (job.status == JobStatus.CANCELLING) {
-                Text(
-                    text = "Cancelling...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
 }
+
+private fun buildJobSummaryLine(job: JobSnapshot): String {
+    val progress =
+        job.progress?.let {
+            "Progress ${it.completedUnits}/${it.totalUnits}${it.details?.let { details -> " ($details)" }.orEmpty()}"
+        }
+    val logs = "${job.recentLogLines.size} log line(s)"
+    return listOfNotNull(progress, logs).joinToString(" | ")
+}
+
+private fun java.time.Instant.formatForUi(): String =
+    DateTimeFormatter
+        .ofPattern("yyyy-MM-dd HH:mm:ss")
+        .withZone(ZoneId.systemDefault())
+        .format(this)

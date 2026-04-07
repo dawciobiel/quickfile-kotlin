@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.dawciobiel.quickfile.app.component.AppComponent
+import io.github.dawciobiel.quickfile.core.errors.BrowseError
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
 import io.github.dawciobiel.quickfile.core.panel.PanelIntent
 
@@ -44,14 +45,27 @@ fun AppContent(component: AppComponent) {
                     Text(
                         text =
                             "Installed plugins: ${runtimeSnapshot.installedPlugins} | " +
+                                "Compatible: ${runtimeSnapshot.compatiblePlugins} | " +
                                 "Running: ${runtimeSnapshot.runningPlugins}",
                         style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = "Plugins directory: ${runtimeSnapshot.pluginsDirectory}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
                         text = runtimeSnapshot.lastScanMessage,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    runtimeSnapshot.discoveredPlugins.forEach { plugin ->
+                        Text(
+                            text = "- ${plugin.id}: ${plugin.status} (${plugin.message})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
@@ -137,7 +151,14 @@ private fun PanelCard(
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (state.error != null) Color(0xFFB42318) else MaterialTheme.colorScheme.primary,
+                )
+            }
+            state.error?.let { error ->
+                Text(
+                    text = formatBrowseError(error),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFB42318),
                 )
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -165,3 +186,12 @@ private fun PanelCard(
         }
     }
 }
+
+private fun formatBrowseError(error: BrowseError): String =
+    when (error) {
+        is BrowseError.LocationNotFound -> "Location not found."
+        is BrowseError.PermissionDenied -> "Permission denied."
+        is BrowseError.PluginUnavailable -> "Plugin is unavailable."
+        is BrowseError.PluginCrashed -> "Plugin crashed or stopped responding."
+        is BrowseError.Unknown -> error.message
+    }

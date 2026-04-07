@@ -6,6 +6,8 @@ import io.github.dawciobiel.quickfile.pluginruntime.DemoPluginRuntimeFacade
 import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeFacade
 import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeSnapshot
 import kotlinx.coroutines.flow.StateFlow
+import java.nio.file.Files
+import java.nio.file.Path
 
 interface AppComponent {
     val leftPanel: PanelComponent
@@ -19,13 +21,17 @@ class DefaultAppComponent(
     componentContext: ComponentContext,
     pluginRuntimeFacade: PluginRuntimeFacade = DemoPluginRuntimeFacade(),
 ) : AppComponent, ComponentContext by componentContext {
+    private val defaultHome = Path.of(System.getProperty("user.home")).toAbsolutePath().normalize()
+    private val defaultDownloads =
+        defaultHome.resolve("Downloads").takeIf { Files.isDirectory(it) } ?: defaultHome
+
     override val leftPanel: PanelComponent =
         DefaultPanelComponent(
             componentContext = childContext(key = "left-panel"),
             panelId = "left",
             title = "Left Panel",
             initiallyActive = true,
-            initialLocation = "/workspace",
+            initialLocation = defaultHome.toString(),
             browseGateway = pluginRuntimeFacade.browseGateway,
         )
 
@@ -35,7 +41,7 @@ class DefaultAppComponent(
             panelId = "right",
             title = "Right Panel",
             initiallyActive = false,
-            initialLocation = "/downloads",
+            initialLocation = defaultDownloads.toString(),
             browseGateway = pluginRuntimeFacade.browseGateway,
         )
 

@@ -2,10 +2,12 @@ package io.github.dawciobiel.quickfile.app.component
 
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.lifecycle.Lifecycle
+import io.github.dawciobiel.quickfile.core.browse.BrowseException
 import io.github.dawciobiel.quickfile.core.browse.BrowseGateway
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
 import io.github.dawciobiel.quickfile.core.panel.PanelIntent
 import io.github.dawciobiel.quickfile.core.panel.PanelState
+import io.github.dawciobiel.quickfile.pluginruntime.PluginProcessBrowseGateway
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +43,7 @@ class DefaultPanelComponent(
                 entries = emptyList(),
                 isActive = initiallyActive,
                 isLoading = true,
+                error = null,
                 statusMessage = "Loading directory entries...",
             ),
         )
@@ -52,6 +55,7 @@ class DefaultPanelComponent(
             object : Lifecycle.Callbacks {
                 override fun onDestroy() {
                     scope.cancel()
+                    (browseGateway as? PluginProcessBrowseGateway)?.close()
                 }
             },
         )
@@ -84,11 +88,12 @@ class DefaultPanelComponent(
 
     private fun browse(location: String) {
         mutableState.update { current ->
-            current.copy(
-                currentLocation = location,
-                isLoading = true,
-                statusMessage = "Loading $location ...",
-            )
+                current.copy(
+                    currentLocation = location,
+                    isLoading = true,
+                    error = null,
+                    statusMessage = "Loading $location ...",
+                )
         }
 
         scope.launch {
@@ -100,17 +105,40 @@ class DefaultPanelComponent(
                         currentLocation = result.location,
                         entries = result.entries,
                         isLoading = false,
+                        error = null,
                         statusMessage = "${result.entries.size} entries loaded.",
                     )
                 }
             }.onFailure { error ->
+                val browseError = (error as? BrowseException)?.error
                 mutableState.update { current ->
                     current.copy(
                         isLoading = false,
-                        statusMessage = "Browse failed: ${error.message ?: "Unknown error"}",
+                        error = browseError,
+                        statusMessage =
+                            browseError?.let(::describeBrowseError)
+                                ?: "Browse failed: ${error.message ?: "Unknown error"}",
                     )
                 }
             }
         }
     }
+
+    private fun describeBrowseError(error: io.github.dawciobiel.quickfile.core.errors.BrowseError): String =
+        when (error) {
+            is io.github.dawciobiel.quickfile.core.errors.BrowseError.LocationNotFound ->
+                "Location not found: ${error.location}"
+
+            is io.github.dawciobiel.quickfile.core.errors.BrowseError.PermissionDenied ->
+                "Permission denied: ${error.location}"
+
+            is io.github.dawciobiel.quickfile.core.errors.BrowseError.PluginUnavailable ->
+                "Plugin unavailable: ${error.pluginId}"
+
+            is io.github.dawciobiel.quickfile.core.errors.BrowseError.PluginCrashed ->
+                "Plugin crashed: ${error.pluginId} (${error.cause})"
+
+            is io.github.dawciobiel.quickfile.core.errors.BrowseError.Unknown ->
+                "Browse failed: ${error.message}"
+        }
 }

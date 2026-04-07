@@ -25,6 +25,9 @@ This folder contains documentation that describes the architecture and the major
 `adrs/`
 : Architecture Decision Records (why decisions were made).
 
+`roadmap/`
+: Implementation roadmap and milestone sequencing.
+
 `logging/`, `errors/`, `security/`
 : Cross-cutting concerns and conventions (observability, error handling, filesystem safety).
 

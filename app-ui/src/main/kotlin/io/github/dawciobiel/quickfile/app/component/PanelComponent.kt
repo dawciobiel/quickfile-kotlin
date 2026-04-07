@@ -33,6 +33,7 @@ class DefaultPanelComponent(
     initiallyActive: Boolean,
     initialLocation: String,
     private val browseGateway: BrowseGateway,
+    private val onLocationChanged: (String) -> Unit = {},
 ) : PanelComponent, ComponentContext by componentContext {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -140,6 +141,7 @@ class DefaultPanelComponent(
                         statusMessage = "${result.entries.size} entries loaded.",
                     )
                 }
+                onLocationChanged(result.location)
             }.onFailure { error ->
                 val browseError = (error as? BrowseException)?.error
                 mutableState.update { current ->

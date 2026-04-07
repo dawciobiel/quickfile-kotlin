@@ -14,6 +14,7 @@ import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeSnapshot
 import kotlinx.coroutines.flow.StateFlow
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.prefs.Preferences
 
 interface AppComponent {
     val leftPanel: PanelComponent
@@ -41,9 +42,12 @@ class DefaultAppComponent(
     pluginRuntimeFacade: PluginRuntimeFacade = DemoPluginRuntimeFacade(),
 ) : AppComponent, ComponentContext by componentContext {
     private val jobRegistry: JobRegistry = InMemoryJobRegistry().also(::seedDemoJobs)
+    private val preferences = Preferences.userRoot().node("io/github/dawciobiel/quickfile/app-ui")
     private val defaultHome = Path.of(System.getProperty("user.home")).toAbsolutePath().normalize()
     private val defaultDownloads =
         defaultHome.resolve("Downloads").takeIf { Files.isDirectory(it) } ?: defaultHome
+    private val initialLeftLocation = preferences.get("leftPanelLocation", defaultHome.toString())
+    private val initialRightLocation = preferences.get("rightPanelLocation", defaultDownloads.toString())
     private val mutablePendingConfirmation = MutableStateFlow<PendingConfirmation?>(null)
     private var pendingOperation: (() -> Unit)? = null
 
@@ -53,8 +57,9 @@ class DefaultAppComponent(
             panelId = "left",
             title = "Left Panel",
             initiallyActive = true,
-            initialLocation = defaultHome.toString(),
+            initialLocation = initialLeftLocation,
             browseGateway = pluginRuntimeFacade.browseGateway,
+            onLocationChanged = { preferences.put("leftPanelLocation", it) },
         )
 
     override val rightPanel: PanelComponent =
@@ -63,8 +68,9 @@ class DefaultAppComponent(
             panelId = "right",
             title = "Right Panel",
             initiallyActive = false,
-            initialLocation = defaultDownloads.toString(),
+            initialLocation = initialRightLocation,
             browseGateway = pluginRuntimeFacade.browseGateway,
+            onLocationChanged = { preferences.put("rightPanelLocation", it) },
         )
 
     override val jobs: JobsComponent =

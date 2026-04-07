@@ -72,6 +72,8 @@ class DefaultPanelComponent(
 
             PanelIntent.Refresh -> browse(location = state.value.currentLocation)
 
+            is PanelIntent.MoveSelection -> moveSelection(intent.offset)
+
             PanelIntent.NavigateUp -> {
                 parentLocation(state.value.currentLocation)?.let(::browse)
                     ?: mutableState.update { current ->
@@ -91,6 +93,14 @@ class DefaultPanelComponent(
                         statusMessage = describeSelection(intent.entry),
                     )
                 }
+
+            PanelIntent.OpenSelectedEntry -> {
+                val selectedEntry =
+                    state.value.entries.firstOrNull { it.name == state.value.selectedEntryName }
+                selectedEntry?.let { entry ->
+                    onIntent(PanelIntent.OpenEntry(entry))
+                }
+            }
 
             is PanelIntent.OpenEntry -> {
                 if (intent.entry.kind == PanelEntryKind.DIRECTORY) {
@@ -119,12 +129,13 @@ class DefaultPanelComponent(
             runCatching {
                 browseGateway.listEntries(location)
             }.onSuccess { result ->
+                val firstEntry = result.entries.firstOrNull()
                 mutableState.update { current ->
                     current.copy(
                         currentLocation = result.location,
                         entries = result.entries,
                         isLoading = false,
-                        selectedEntryName = null,
+                        selectedEntryName = firstEntry?.name,
                         error = null,
                         statusMessage = "${result.entries.size} entries loaded.",
                     )
@@ -148,6 +159,29 @@ class DefaultPanelComponent(
         runCatching {
             Path.of(location).parent?.toString()
         }.getOrNull()
+
+    private fun moveSelection(offset: Int) {
+        val entries = state.value.entries
+        if (entries.isEmpty()) {
+            return
+        }
+
+        val currentIndex = entries.indexOfFirst { it.name == state.value.selectedEntryName }
+        val nextIndex =
+            when {
+                currentIndex == -1 && offset > 0 -> 0
+                currentIndex == -1 && offset < 0 -> entries.lastIndex
+                else -> (currentIndex + offset).coerceIn(0, entries.lastIndex)
+            }
+
+        val nextEntry = entries[nextIndex]
+        mutableState.update { current ->
+            current.copy(
+                selectedEntryName = nextEntry.name,
+                statusMessage = describeSelection(nextEntry),
+            )
+        }
+    }
 
     private fun describeSelection(entry: PanelEntry): String =
         when (entry.kind) {

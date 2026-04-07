@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -122,9 +130,16 @@ private fun PanelCard(
 ) {
     val state by component.state.collectAsState()
     var locationInput by remember(component) { mutableStateOf(state.currentLocation) }
+    val focusRequester = remember(component) { FocusRequester() }
 
     LaunchedEffect(state.currentLocation) {
         locationInput = state.currentLocation
+    }
+
+    LaunchedEffect(state.isActive) {
+        if (state.isActive) {
+            focusRequester.requestFocus()
+        }
     }
 
     val accent =
@@ -139,6 +154,39 @@ private fun PanelCard(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .focusRequester(focusRequester)
+                    .focusable()
+                    .onPreviewKeyEvent { event ->
+                        if (!state.isActive || event.type != KeyEventType.KeyDown) {
+                            return@onPreviewKeyEvent false
+                        }
+
+                        when (event.key) {
+                            Key.DirectionDown -> {
+                                component.onIntent(PanelIntent.MoveSelection(1))
+                                true
+                            }
+
+                            Key.DirectionUp -> {
+                                component.onIntent(PanelIntent.MoveSelection(-1))
+                                true
+                            }
+
+                            Key.Enter,
+                            Key.NumPadEnter,
+                            -> {
+                                component.onIntent(PanelIntent.OpenSelectedEntry)
+                                true
+                            }
+
+                            Key.Backspace -> {
+                                component.onIntent(PanelIntent.NavigateUp)
+                                true
+                            }
+
+                            else -> false
+                        }
+                    }
                     .border(width = 2.dp, color = accent)
                     .background(Color.White)
                     .clickable(onClick = onActivate)
@@ -232,6 +280,11 @@ private fun PanelCard(
                     )
                 }
             }
+            Text(
+                text = buildPanelFooter(state),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -341,3 +394,9 @@ private fun formatBrowseError(error: BrowseError): String =
         is BrowseError.PluginCrashed -> "Plugin crashed or stopped responding."
         is BrowseError.Unknown -> error.message
     }
+
+private fun buildPanelFooter(state: io.github.dawciobiel.quickfile.core.panel.PanelState): String {
+    val selection =
+        state.selectedEntryName?.let { "Selected: $it" } ?: "Selected: none"
+    return "${state.entries.size} entries | $selection"
+}

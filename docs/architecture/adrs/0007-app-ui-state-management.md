@@ -1,6 +1,6 @@
 # ADR: State management for :app-ui
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-04-04
 
@@ -118,41 +118,52 @@ Ballast is a KMP MVI library with explicit `InputHandler` (reducer + side effect
 
 ---
 
-## Open questions (to resolve before accepting this ADR)
+## Decision
 
-This ADR remains **Proposed** until the following questions are answered:
+We adopt **Option B — Decompose** for the structure of `:app-ui`.
 
-1. **Navigation model** — Is stack-based navigation (back button) needed for the multi-panel layout, or is the layout essentially static (panels are always visible, only content changes)? The answer strongly favours or disfavours Decompose.
+Rationale:
+- QuickFile is better modeled as a set of **long-lived, cooperating UI components** (left panel, right panel, jobs/transfers area, dialogs, settings) than as a sequence of full-screen views.
+- We want explicit ownership and lifecycle for those UI parts; Decompose provides that structure directly.
+- We still want a disciplined event flow, but we do **not** want to invent our own UI framework around `StateFlow`.
+- Circuit is less natural for the file-manager style multi-panel layout, and Ballast adds more ceremony than the project currently needs.
 
-2. **Team familiarity** — Is the team (or author) already familiar with Decompose, Circuit, or Ballast? If not, Option A (plain `StateFlow`) minimises onboarding cost and has no risk of library churn.
+## How this decision should be interpreted
 
-3. **KMP future plans** — Will the UI ever target Android or iOS? If yes, a KMP-aware library (Decompose, Ballast, Circuit) pays off earlier.
+Decompose is the **structural framework** for `:app-ui`, not a replacement for architecture rules.
 
-4. **Debugging needs** — Is structured intent logging or time-travel debugging important enough to justify the overhead of a library that provides it?
+This ADR also establishes the following application rules:
 
-5. **Compose Desktop maturity** — Have we validated that the chosen library works well with the specific Compose Desktop version used in the project (not just Compose for Android)?
+1. **UI is organized as a component tree**
+   - `:app-ui` has a top-level `AppComponent`.
+   - The app is composed from child components such as `LeftPanelComponent`, `RightPanelComponent`, `JobsComponent`, `SettingsComponent`, and dialog-specific components.
+   - Each component owns its own UI state and exposes it to Compose for rendering.
 
-## Preliminary lean
+2. **State remains explicit and testable**
+   - Component state is represented as immutable state objects and exposed via `StateFlow` (or equivalent Decompose-compatible observable state).
+   - State logic must remain unit-testable without Compose runtime.
 
-Based on current project context (Desktop-only, small team, no existing framework preference, plain Kotlin/JVM):
+3. **Event flow stays strict**
+   - Compose UI emits intents/events only to its owning component.
+   - Components call `:core` services/gateways; they do not talk directly to plugin processes.
+   - `:core` and `:plugin-runtime` remain the only layers that coordinate plugin communication and job execution.
+   - External results are translated into state updates inside the owning component.
 
-> **Option A (plain `StateFlow`)** is the lowest-risk starting point for v1. It can be adopted immediately without learning a new framework, and the store abstraction is thin enough to be replaced later. If navigation complexity grows, Decompose can be introduced incrementally for the navigation layer only.
+4. **Plugins do not own host UI**
+   - A plugin must not inject a live Compose component directly into the host UI tree.
+   - If plugins extend the UI, they do so through a host-controlled extension contract defined separately.
+   - Rendering, lifecycle, and placement in the UI remain under host control.
 
-This is a lean, not a decision. Update status to `Accepted` once the open questions above are resolved.
+5. **Navigation model for v1**
+   - The main file-manager layout is effectively **static**: the primary panels stay visible while their content changes.
+   - Decompose is used mainly for component composition and lifecycle.
+   - Stack-style navigation is reserved for secondary flows such as dialogs, settings sections, or future wizard-like screens.
 
-## Consequences (anticipated, pending decision)
+## Consequences
 
-- **Option A adopted:**
-  - `:app-ui` owns a set of feature store classes (`PanelStore`, `JobsStore`, `SettingsStore`).
-  - Stores are instantiated and wired in a top-level `AppComponent` (plain class, not a library component).
-  - Compose UI collects `StateFlow` via `collectAsState()`.
-  - Navigation between views is a simple `MutableStateFlow<Screen>` in `AppComponent`.
-
-- **Option B (Decompose) adopted:**
-  - `:app-ui` introduces a Decompose dependency; each panel and screen becomes a `ComponentContext`.
-  - Navigation handled by Decompose `ChildStack` or custom slot composition for side-by-side panels.
-  - Requires a concrete plan for how two independent panels share a parent `ComponentContext`.
-
-- **All options:**
-  - `:core` and `:plugin-runtime` remain Compose-free; state is surfaced as `StateFlow` to `:app-ui`.
-  - Unit tests for stores/presenters do not require Compose runtime.
+- `:app-ui` will introduce a Decompose dependency.
+- The implementation should start with a top-level `AppComponent` that owns the long-lived child components for the main layout.
+- Side-by-side panels are modeled as sibling child components under the same parent, not as entries in a back stack.
+- Compose UI functions remain thin: they render component state and send user intents upward.
+- If a future plugin extension system needs UI contribution points, it must be designed as a host-defined contract, not as arbitrary plugin-owned Compose content.
+- `:core` and `:plugin-runtime` remain Compose-free and continue exposing data through plain Kotlin APIs and `StateFlow`.

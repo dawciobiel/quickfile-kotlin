@@ -44,6 +44,7 @@ class DefaultJobsComponent(
     componentContext: ComponentContext,
     private val jobRegistry: JobRegistry,
     private val fileOperationsGateway: FileOperationsGateway,
+    private val onOperationTerminal: () -> Unit = {},
 ) : JobsComponent, ComponentContext by componentContext {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var demoJobCounter = 0
@@ -266,7 +267,14 @@ class DefaultJobsComponent(
                     message = event.message,
                     errorMessage = if (event.status == JobStatus.FAILED) event.message else null,
                 )
+                if (event.status in terminalStatuses) {
+                    onOperationTerminal()
+                }
             }
         }
+    }
+
+    private companion object {
+        val terminalStatuses = setOf(JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
     }
 }

@@ -61,4 +61,20 @@ class InMemoryJobRegistryTest {
         assertEquals(secondCompleted.jobId, retainedIds.last())
         assertNull(registry.allJobsFlow.value.find { it.jobId == firstCompleted.jobId })
     }
+
+    @Test
+    fun `clearFinished removes only terminal jobs`() {
+        val registry = InMemoryJobRegistry()
+        val completed = registry.createJob(OperationKind.COPY, initialStatus = JobStatus.COMPLETED)
+        val failed = registry.createJob(OperationKind.MOVE, initialStatus = JobStatus.FAILED)
+        val running = registry.createJob(OperationKind.DELETE, initialStatus = JobStatus.RUNNING)
+
+        val removed = registry.clearFinished()
+
+        assertEquals(2, removed)
+        assertNull(registry.jobFlow(completed.jobId))
+        assertNull(registry.jobFlow(failed.jobId))
+        assertNotNull(registry.jobFlow(running.jobId))
+        assertEquals(listOf(running.jobId), registry.allJobsFlow.value.map(JobSnapshot::jobId))
+    }
 }

@@ -20,9 +20,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class JobsFilter {
+    ALL,
+    ACTIVE,
+    FINISHED,
+}
+
 data class JobsState(
     val summary: String,
     val jobs: List<JobSnapshot> = emptyList(),
+    val selectedFilter: JobsFilter = JobsFilter.ALL,
+    val finishedJobsCount: Int = 0,
 )
 
 interface JobsComponent {
@@ -38,6 +46,10 @@ interface JobsComponent {
     )
 
     fun cancelJob(jobId: String)
+
+    fun setFilter(filter: JobsFilter)
+
+    fun clearFinished()
 }
 
 class DefaultJobsComponent(
@@ -71,10 +83,14 @@ class DefaultJobsComponent(
 
         scope.launch {
             jobRegistry.allJobsFlow.collect { jobs ->
+                val filter = mutableState.value.selectedFilter
+                val finishedJobsCount = jobs.count { it.status in terminalStatuses }
                 mutableState.value =
                     JobsState(
                         summary = buildSummary(jobs),
-                        jobs = jobs,
+                        jobs = jobs.filterFor(filter),
+                        selectedFilter = filter,
+                        finishedJobsCount = finishedJobsCount,
                     )
             }
         }
@@ -168,6 +184,21 @@ class DefaultJobsComponent(
                 }
             }
         }
+    }
+
+    override fun setFilter(filter: JobsFilter) {
+        val allJobs = jobRegistry.allJobsFlow.value
+        mutableState.value =
+            mutableState.value.copy(
+                selectedFilter = filter,
+                jobs = allJobs.filterFor(filter),
+                finishedJobsCount = allJobs.count { it.status in terminalStatuses },
+                summary = buildSummary(allJobs),
+            )
+    }
+
+    override fun clearFinished() {
+        jobRegistry.clearFinished()
     }
 
     private fun buildSummary(jobs: List<JobSnapshot>): String {
@@ -278,3 +309,10 @@ class DefaultJobsComponent(
         val terminalStatuses = setOf(JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
     }
 }
+
+private fun List<JobSnapshot>.filterFor(filter: JobsFilter): List<JobSnapshot> =
+    when (filter) {
+        JobsFilter.ALL -> this
+        JobsFilter.ACTIVE -> filter { it.status !in setOf(JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED) }
+        JobsFilter.FINISHED -> filter { it.status in setOf(JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED) }
+    }

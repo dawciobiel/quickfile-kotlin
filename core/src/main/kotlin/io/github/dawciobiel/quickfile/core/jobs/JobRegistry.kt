@@ -29,6 +29,8 @@ interface JobRegistry {
         jobId: JobId,
         message: String,
     ): JobSnapshot?
+
+    fun clearFinished(): Int
 }
 
 class InMemoryJobRegistry(
@@ -107,15 +109,31 @@ class InMemoryJobRegistry(
         return flow.value
     }
 
+    override fun clearFinished(): Int {
+        val finishedIds =
+            jobFlows
+                .filterValues { it.value.status in terminalStatuses }
+                .keys
+                .toList()
+
+        finishedIds.forEach(jobFlows::remove)
+        refreshAllJobs()
+        return finishedIds.size
+    }
+
     private fun refreshAllJobs() {
         val snapshots = jobFlows.values.map { it.value }
         val (active, terminal) =
             snapshots.partition { snapshot ->
-                snapshot.status !in setOf(JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+                snapshot.status !in terminalStatuses
             }
 
         mutableAllJobsFlow.value =
             (active + terminal.takeLast(retainedTerminalJobs))
                 .sortedByDescending { it.updatedAt }
+    }
+
+    private companion object {
+        val terminalStatuses = setOf(JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
     }
 }

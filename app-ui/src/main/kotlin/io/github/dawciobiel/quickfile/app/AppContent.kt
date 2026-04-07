@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.dawciobiel.quickfile.app.component.AppComponent
+import io.github.dawciobiel.quickfile.app.component.JobsFilter
 import io.github.dawciobiel.quickfile.core.errors.BrowseError
 import io.github.dawciobiel.quickfile.core.jobs.JobSnapshot
 import io.github.dawciobiel.quickfile.core.jobs.JobStatus
@@ -162,16 +163,44 @@ fun AppContent(component: AppComponent) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text("Jobs", style = MaterialTheme.typography.titleLarge)
-                        OutlinedButton(
-                            onClick = { component.jobs.launchDemoJob() },
-                        ) {
-                            Text("Run Demo Job")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { component.jobs.launchDemoJob() },
+                            ) {
+                                Text("Run Demo Job")
+                            }
+                            OutlinedButton(
+                                onClick = { component.jobs.clearFinished() },
+                                enabled = jobsState.finishedJobsCount > 0,
+                            ) {
+                                Text("Clear Finished")
+                            }
                         }
                     }
                     Text(
                         text = jobsState.summary,
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        JobsFilterChip(
+                            label = "All",
+                            selected = jobsState.selectedFilter == JobsFilter.ALL,
+                            onClick = { component.jobs.setFilter(JobsFilter.ALL) },
+                        )
+                        JobsFilterChip(
+                            label = "Active",
+                            selected = jobsState.selectedFilter == JobsFilter.ACTIVE,
+                            onClick = { component.jobs.setFilter(JobsFilter.ACTIVE) },
+                        )
+                        JobsFilterChip(
+                            label = "Finished",
+                            selected = jobsState.selectedFilter == JobsFilter.FINISHED,
+                            onClick = { component.jobs.setFilter(JobsFilter.FINISHED) },
+                        )
+                    }
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -186,6 +215,17 @@ fun AppContent(component: AppComponent) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun JobsFilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(onClick = onClick) {
+        Text(if (selected) "[$label]" else label)
     }
 }
 

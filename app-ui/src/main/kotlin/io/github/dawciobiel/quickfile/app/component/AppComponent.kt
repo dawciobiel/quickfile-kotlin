@@ -29,6 +29,7 @@ interface AppComponent {
     fun deleteSelectedFromActivePanel()
     fun confirmPendingOperation()
     fun dismissPendingConfirmation()
+    fun switchActivePanel()
 }
 
 data class PendingConfirmation(
@@ -111,6 +112,12 @@ class DefaultAppComponent(
     override fun dismissPendingConfirmation() {
         pendingOperation = null
         mutablePendingConfirmation.value = null
+    }
+
+    override fun switchActivePanel() {
+        val leftIsActive = leftPanel.state.value.isActive
+        leftPanel.onIntent(io.github.dawciobiel.quickfile.core.panel.PanelIntent.SetActive(!leftIsActive))
+        rightPanel.onIntent(io.github.dawciobiel.quickfile.core.panel.PanelIntent.SetActive(leftIsActive))
     }
 
     private fun launchSelectedOperationFromActivePanel(kind: OperationKind) {

@@ -148,6 +148,7 @@ fun AppContent(component: AppComponent) {
                     onCopy = { component.copySelectedFromActivePanel() },
                     onMove = { component.moveSelectedFromActivePanel() },
                     onDelete = { component.deleteSelectedFromActivePanel() },
+                    onSwitchPanel = { component.switchActivePanel() },
                     onActivate = {
                         component.leftPanel.onIntent(PanelIntent.SetActive(true))
                         component.rightPanel.onIntent(PanelIntent.SetActive(false))
@@ -159,6 +160,7 @@ fun AppContent(component: AppComponent) {
                     onCopy = { component.copySelectedFromActivePanel() },
                     onMove = { component.moveSelectedFromActivePanel() },
                     onDelete = { component.deleteSelectedFromActivePanel() },
+                    onSwitchPanel = { component.switchActivePanel() },
                     onActivate = {
                         component.leftPanel.onIntent(PanelIntent.SetActive(false))
                         component.rightPanel.onIntent(PanelIntent.SetActive(true))
@@ -265,6 +267,7 @@ private fun PanelCard(
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onDelete: () -> Unit,
+    onSwitchPanel: () -> Unit,
     onActivate: () -> Unit,
 ) {
     val state by component.state.collectAsState()
@@ -301,6 +304,11 @@ private fun PanelCard(
                         }
 
                         when (event.key) {
+                            Key.Tab -> {
+                                onSwitchPanel()
+                                true
+                            }
+
                             Key.C -> {
                                 if (event.isCtrlPressed) {
                                     onCopy()

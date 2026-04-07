@@ -98,10 +98,11 @@ class DemoPluginRuntimeFacade : PluginRuntimeFacade {
 }
 
 private class UnsupportedFileOperationsGateway : FileOperationsGateway {
-    override suspend fun startCopy(
+    override suspend fun startOperation(
         jobId: String,
+        kind: io.github.dawciobiel.quickfile.core.jobs.OperationKind,
         sourceLocation: String,
-        destinationLocation: String,
+        destinationLocation: String?,
         onEvent: (FileOperationEvent) -> Unit,
     ) {
         error("No compatible file-operations plugin is installed.")

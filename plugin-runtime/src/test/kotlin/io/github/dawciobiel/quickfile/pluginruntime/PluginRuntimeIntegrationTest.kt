@@ -1,5 +1,7 @@
 package io.github.dawciobiel.quickfile.pluginruntime
 
+import io.github.dawciobiel.quickfile.core.jobs.JobStatus
+import io.github.dawciobiel.quickfile.core.jobs.OperationKind
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
 import io.github.dawciobiel.quickfile.pluginruntime.discovery.FileSystemPluginDiscovery
 import io.github.dawciobiel.quickfile.pluginruntime.discovery.PluginCompatibilityStatus
@@ -9,6 +11,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
+import kotlin.io.path.notExists
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -60,9 +63,9 @@ class PluginRuntimeIntegrationTest {
         val sourceRoot = Files.createTempDirectory("quickfile-copy-source")
         val targetRoot = Files.createTempDirectory("quickfile-copy-target")
         val sourceFile = sourceRoot.resolve("sample.txt")
-        Files.writeString(
-            sourceFile,
-            "QuickFile integration copy test",
+            Files.writeString(
+                sourceFile,
+                "QuickFile integration copy test",
             StandardOpenOption.CREATE,
             StandardOpenOption.TRUNCATE_EXISTING,
         )
@@ -71,8 +74,9 @@ class PluginRuntimeIntegrationTest {
         val events = mutableListOf<FileOperationEvent>()
         try {
             runBlocking {
-                gateway.startCopy(
+                gateway.startOperation(
                     jobId = "copy-test-job",
+                    kind = OperationKind.COPY,
                     sourceLocation = sourceFile.toString(),
                     destinationLocation = targetRoot.toString(),
                     onEvent = events::add,
@@ -82,12 +86,71 @@ class PluginRuntimeIntegrationTest {
             val copiedFile = targetRoot.resolve("sample.txt")
             assertTrue(copiedFile.exists())
             assertEquals("QuickFile integration copy test", copiedFile.readText())
-            assertTrue(events.any { it is FileOperationEvent.StatusChanged && it.status == io.github.dawciobiel.quickfile.core.jobs.JobStatus.COMPLETED })
+            assertTrue(events.any { it is FileOperationEvent.StatusChanged && it.status == JobStatus.COMPLETED })
             assertTrue(events.any { it is FileOperationEvent.ProgressReported })
         } finally {
             gateway.close()
         }
     }
+
+    @Test
+    fun `file operations gateway moves file into target directory`() {
+        val discoveredPlugin = discoverReferencePlugin()
+        val sourceRoot = Files.createTempDirectory("quickfile-move-source")
+        val targetRoot = Files.createTempDirectory("quickfile-move-target")
+        val sourceFile = sourceRoot.resolve("move-me.txt")
+        Files.writeString(sourceFile, "QuickFile integration move test")
+
+        val gateway = PluginProcessFileOperationsGateway(discoveredPlugin)
+        try {
+            runBlocking {
+                gateway.startOperation(
+                    jobId = "move-test-job",
+                    kind = OperationKind.MOVE,
+                    sourceLocation = sourceFile.toString(),
+                    destinationLocation = targetRoot.toString(),
+                    onEvent = {},
+                )
+            }
+
+            val movedFile = targetRoot.resolve("move-me.txt")
+            assertTrue(movedFile.exists())
+            assertEquals("QuickFile integration move test", movedFile.readText())
+            assertTrue(sourceFile.notExists())
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
+    fun `file operations gateway deletes file`() {
+        val discoveredPlugin = discoverReferencePlugin()
+        val sourceRoot = Files.createTempDirectory("quickfile-delete-source")
+        val sourceFile = sourceRoot.resolve("delete-me.txt")
+        Files.writeString(sourceFile, "QuickFile integration delete test")
+
+        val gateway = PluginProcessFileOperationsGateway(discoveredPlugin)
+        try {
+            runBlocking {
+                gateway.startOperation(
+                    jobId = "delete-test-job",
+                    kind = OperationKind.DELETE,
+                    sourceLocation = sourceFile.toString(),
+                    destinationLocation = null,
+                    onEvent = {},
+                )
+            }
+
+            assertTrue(sourceFile.notExists())
+        } finally {
+            gateway.close()
+        }
+    }
+
+    private fun discoverReferencePlugin() =
+        FileSystemPluginDiscovery(
+            pluginsDirectory = installReferencePlugin().parent,
+        ).discover().discoveredPlugins.single()
 
     private fun installReferencePlugin(): Path {
         val zipPath =

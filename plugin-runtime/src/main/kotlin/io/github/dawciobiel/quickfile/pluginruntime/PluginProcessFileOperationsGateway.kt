@@ -3,6 +3,7 @@ package io.github.dawciobiel.quickfile.pluginruntime
 import com.google.protobuf.ByteString
 import io.github.dawciobiel.quickfile.core.jobs.JobProgress
 import io.github.dawciobiel.quickfile.core.jobs.JobStatus
+import io.github.dawciobiel.quickfile.core.jobs.OperationKind as CoreOperationKind
 import io.github.dawciobiel.quickfile.pluginruntime.discovery.DiscoveredPlugin
 import io.grpc.StatusRuntimeException
 import quickfile.pluginapi.v1.CancelOperationRequest
@@ -19,23 +20,26 @@ class PluginProcessFileOperationsGateway(
     @Volatile
     private var client: LaunchedPluginClient? = null
 
-    override suspend fun startCopy(
+    override suspend fun startOperation(
         jobId: String,
+        kind: CoreOperationKind,
         sourceLocation: String,
-        destinationLocation: String,
+        destinationLocation: String?,
         onEvent: (FileOperationEvent) -> Unit,
     ) {
         val launchedClient = ensureClient()
-        val updates =
-            launchedClient.fileOperations.startOperation(
-                StartOperationRequest
-                    .newBuilder()
-                    .setJobId(quickfile.pluginapi.v1.JobId.newBuilder().setValue(jobId).build())
-                    .setKind(OperationKind.OPERATION_KIND_COPY)
-                    .addSources(toLocationRef(sourceLocation))
-                    .setTarget(toLocationRef(destinationLocation))
-                    .build(),
-            )
+        val requestBuilder =
+            StartOperationRequest
+                .newBuilder()
+                .setJobId(quickfile.pluginapi.v1.JobId.newBuilder().setValue(jobId).build())
+                .setKind(kind.toPluginOperationKind())
+                .addSources(toLocationRef(sourceLocation))
+
+        destinationLocation?.let {
+            requestBuilder.setTarget(toLocationRef(it))
+        }
+
+        val updates = launchedClient.fileOperations.startOperation(requestBuilder.build())
 
         while (updates.hasNext()) {
             val update = updates.next()
@@ -122,6 +126,15 @@ class PluginProcessFileOperationsGateway(
             .setOpaque(ByteString.copyFrom(location, StandardCharsets.UTF_8))
             .build()
 }
+
+private fun CoreOperationKind.toPluginOperationKind(): OperationKind =
+    when (this) {
+        CoreOperationKind.COPY -> OperationKind.OPERATION_KIND_COPY
+        CoreOperationKind.MOVE -> OperationKind.OPERATION_KIND_MOVE
+        CoreOperationKind.DELETE -> OperationKind.OPERATION_KIND_DELETE
+        CoreOperationKind.RENAME -> OperationKind.OPERATION_KIND_RENAME
+        CoreOperationKind.ARCHIVE -> OperationKind.OPERATION_KIND_ARCHIVE
+    }
 
 private fun JobStatusChanged.Status.toCoreStatus(): JobStatus =
     when (this) {

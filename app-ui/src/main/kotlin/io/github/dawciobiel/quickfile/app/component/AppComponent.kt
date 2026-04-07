@@ -21,6 +21,8 @@ interface AppComponent {
     val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot>
 
     fun copySelectedFromActivePanel()
+    fun moveSelectedFromActivePanel()
+    fun deleteSelectedFromActivePanel()
 }
 
 class DefaultAppComponent(
@@ -67,6 +69,18 @@ class DefaultAppComponent(
     override val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot> = pluginRuntimeFacade.snapshot
 
     override fun copySelectedFromActivePanel() {
+        launchSelectedOperationFromActivePanel(OperationKind.COPY)
+    }
+
+    override fun moveSelectedFromActivePanel() {
+        launchSelectedOperationFromActivePanel(OperationKind.MOVE)
+    }
+
+    override fun deleteSelectedFromActivePanel() {
+        launchSelectedOperationFromActivePanel(OperationKind.DELETE)
+    }
+
+    private fun launchSelectedOperationFromActivePanel(kind: OperationKind) {
         val sourcePanel = if (leftPanel.state.value.isActive) leftPanel else rightPanel
         val targetPanel = if (sourcePanel === leftPanel) rightPanel else leftPanel
         val sourceState = sourcePanel.state.value
@@ -75,14 +89,20 @@ class DefaultAppComponent(
             sourceState.entries.firstOrNull { it.name == sourceState.selectedEntryName }
                 ?: return
 
-        jobs.launchCopyJob(
+        jobs.launchFileOperationJob(
+            kind = kind,
             entryName = selectedEntry.name,
             sourceLocation =
                 selectedEntry.childLocation
                     ?: sourceState.currentLocation.let { currentLocation ->
                         Path.of(currentLocation).resolve(selectedEntry.name).toString()
                     },
-            destinationLocation = targetState.currentLocation,
+            destinationLocation =
+                if (kind == OperationKind.DELETE) {
+                    null
+                } else {
+                    targetState.currentLocation
+                },
         )
     }
 

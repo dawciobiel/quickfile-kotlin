@@ -21,6 +21,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -55,6 +57,7 @@ import java.time.format.DateTimeFormatter
 fun AppContent(component: AppComponent) {
     val runtimeSnapshot by component.pluginRuntimeSnapshot.collectAsState()
     val jobsState by component.jobs.state.collectAsState()
+    val pendingConfirmation by component.pendingConfirmation.collectAsState()
     val leftPanelState by component.leftPanel.state.collectAsState()
     val rightPanelState by component.rightPanel.state.collectAsState()
     val activePanelState = if (leftPanelState.isActive) leftPanelState else rightPanelState
@@ -215,6 +218,24 @@ fun AppContent(component: AppComponent) {
                 }
             }
         }
+    }
+
+    pendingConfirmation?.let { confirmation ->
+        AlertDialog(
+            onDismissRequest = { component.dismissPendingConfirmation() },
+            title = { Text("Confirm ${confirmation.operationKind.name.lowercase().replaceFirstChar(Char::uppercase)}") },
+            text = { Text(confirmation.message) },
+            confirmButton = {
+                TextButton(onClick = { component.confirmPendingOperation() }) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { component.dismissPendingConfirmation() }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

@@ -6,6 +6,8 @@ import io.github.dawciobiel.quickfile.core.jobs.InMemoryJobRegistry
 import io.github.dawciobiel.quickfile.core.jobs.JobRegistry
 import io.github.dawciobiel.quickfile.core.jobs.JobStatus
 import io.github.dawciobiel.quickfile.core.jobs.OperationKind
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import io.github.dawciobiel.quickfile.pluginruntime.DemoPluginRuntimeFacade
 import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeFacade
 import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeSnapshot
@@ -19,11 +21,20 @@ interface AppComponent {
     val jobs: JobsComponent
     val settings: SettingsComponent
     val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot>
+    val pendingConfirmation: StateFlow<PendingConfirmation?>
 
     fun copySelectedFromActivePanel()
     fun moveSelectedFromActivePanel()
     fun deleteSelectedFromActivePanel()
+    fun confirmPendingOperation()
+    fun dismissPendingConfirmation()
 }
+
+data class PendingConfirmation(
+    val operationKind: OperationKind,
+    val entryName: String,
+    val message: String,
+)
 
 class DefaultAppComponent(
     componentContext: ComponentContext,
@@ -33,6 +44,8 @@ class DefaultAppComponent(
     private val defaultHome = Path.of(System.getProperty("user.home")).toAbsolutePath().normalize()
     private val defaultDownloads =
         defaultHome.resolve("Downloads").takeIf { Files.isDirectory(it) } ?: defaultHome
+    private val mutablePendingConfirmation = MutableStateFlow<PendingConfirmation?>(null)
+    private var pendingOperation: (() -> Unit)? = null
 
     override val leftPanel: PanelComponent =
         DefaultPanelComponent(
@@ -68,6 +81,7 @@ class DefaultAppComponent(
         )
 
     override val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot> = pluginRuntimeFacade.snapshot
+    override val pendingConfirmation: StateFlow<PendingConfirmation?> = mutablePendingConfirmation.asStateFlow()
 
     override fun copySelectedFromActivePanel() {
         launchSelectedOperationFromActivePanel(OperationKind.COPY)
@@ -78,7 +92,19 @@ class DefaultAppComponent(
     }
 
     override fun deleteSelectedFromActivePanel() {
-        launchSelectedOperationFromActivePanel(OperationKind.DELETE)
+        prepareSelectedOperationConfirmation(OperationKind.DELETE)
+    }
+
+    override fun confirmPendingOperation() {
+        val action = pendingOperation ?: return
+        pendingOperation = null
+        mutablePendingConfirmation.value = null
+        action()
+    }
+
+    override fun dismissPendingConfirmation() {
+        pendingOperation = null
+        mutablePendingConfirmation.value = null
     }
 
     private fun launchSelectedOperationFromActivePanel(kind: OperationKind) {
@@ -105,6 +131,22 @@ class DefaultAppComponent(
                     targetState.currentLocation
                 },
         )
+    }
+
+    private fun prepareSelectedOperationConfirmation(kind: OperationKind) {
+        val sourcePanel = if (leftPanel.state.value.isActive) leftPanel else rightPanel
+        val sourceState = sourcePanel.state.value
+        val selectedEntry =
+            sourceState.entries.firstOrNull { it.name == sourceState.selectedEntryName }
+                ?: return
+
+        pendingOperation = { launchSelectedOperationFromActivePanel(kind) }
+        mutablePendingConfirmation.value =
+            PendingConfirmation(
+                operationKind = kind,
+                entryName = selectedEntry.name,
+                message = "Delete ${selectedEntry.name} from ${sourceState.currentLocation}?",
+            )
     }
 
     private fun seedDemoJobs(jobRegistry: JobRegistry) {

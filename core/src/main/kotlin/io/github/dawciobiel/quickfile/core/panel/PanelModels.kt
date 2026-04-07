@@ -1,5 +1,7 @@
 package io.github.dawciobiel.quickfile.core.panel
 
+import io.github.dawciobiel.quickfile.core.errors.BrowseError
+
 data class PanelState(
     val panelId: String,
     val title: String,
@@ -7,6 +9,7 @@ data class PanelState(
     val entries: List<PanelEntry>,
     val isActive: Boolean,
     val isLoading: Boolean = false,
+    val error: BrowseError? = null,
     val statusMessage: String? = null,
 )
 

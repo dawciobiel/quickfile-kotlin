@@ -59,6 +59,7 @@ class DefaultAppComponent(
             componentContext = childContext(key = "jobs"),
             jobRegistry = jobRegistry,
             fileOperationsGateway = pluginRuntimeFacade.fileOperationsGateway,
+            onOperationTerminal = ::refreshPanelsAfterOperation,
         )
 
     override val settings: SettingsComponent =
@@ -131,5 +132,10 @@ class DefaultAppComponent(
             ),
             message = "Compressing files into backup.zip",
         )
+    }
+
+    private fun refreshPanelsAfterOperation() {
+        leftPanel.onIntent(io.github.dawciobiel.quickfile.core.panel.PanelIntent.Refresh)
+        rightPanel.onIntent(io.github.dawciobiel.quickfile.core.panel.PanelIntent.Refresh)
     }
 }

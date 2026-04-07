@@ -7,6 +7,8 @@ import io.github.dawciobiel.quickfile.core.jobs.JobSnapshot
 import io.github.dawciobiel.quickfile.core.jobs.JobProgress
 import io.github.dawciobiel.quickfile.core.jobs.JobStatus
 import io.github.dawciobiel.quickfile.core.jobs.OperationKind
+import io.github.dawciobiel.quickfile.pluginruntime.FileOperationEvent
+import io.github.dawciobiel.quickfile.pluginruntime.FileOperationsGateway
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,10 +42,12 @@ interface JobsComponent {
 class DefaultJobsComponent(
     componentContext: ComponentContext,
     private val jobRegistry: JobRegistry,
+    private val fileOperationsGateway: FileOperationsGateway,
 ) : JobsComponent, ComponentContext by componentContext {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var demoJobCounter = 0
     private val runningDemoJobs = linkedMapOf<String, Job>()
+    private val runningOperationJobs = linkedSetOf<String>()
     private val mutableState =
         MutableStateFlow(
             JobsState(
@@ -58,6 +62,7 @@ class DefaultJobsComponent(
             object : Lifecycle.Callbacks {
                 override fun onDestroy() {
                     scope.cancel()
+                    (fileOperationsGateway as? AutoCloseable)?.close()
                 }
             },
         )
@@ -93,33 +98,65 @@ class DefaultJobsComponent(
         sourceLocation: String,
         destinationLocation: String,
     ) {
-        scheduleSimulatedJob(
-            kind = OperationKind.COPY,
-            queuedMessage = "Queued copy of $entryName to $destinationLocation.",
-            runningStartMessage = "Preparing copy from $sourceLocation",
-            transferMessage = "Copying $entryName to $destinationLocation",
-            completionMessage = "Copied $entryName to $destinationLocation.",
-            failureMessage = "Failed to copy $entryName.",
-            failureError = null,
-            shouldFail = false,
-        )
+        val snapshot =
+            jobRegistry.createJob(
+                kind = OperationKind.COPY,
+                initialStatus = JobStatus.PENDING,
+                initialMessage = "Queued copy of $entryName to $destinationLocation.",
+            )
+        runningOperationJobs += snapshot.jobId
+
+        scope.launch {
+            runCatching {
+                fileOperationsGateway.startCopy(
+                    jobId = snapshot.jobId,
+                    sourceLocation = sourceLocation,
+                    destinationLocation = destinationLocation,
+                ) { event ->
+                    applyOperationEvent(snapshot.jobId, event)
+                }
+            }.onFailure { error ->
+                jobRegistry.updateJob(
+                    jobId = snapshot.jobId,
+                    status = JobStatus.FAILED,
+                    message = "Copy execution failed.",
+                    errorMessage = error.message ?: "Unknown copy error.",
+                )
+            }
+            runningOperationJobs -= snapshot.jobId
+        }
     }
 
     override fun cancelJob(jobId: String) {
-        val runningJob = runningDemoJobs[jobId] ?: return
-        scope.launch {
-            jobRegistry.updateJob(
-                jobId = jobId,
-                status = JobStatus.CANCELLING,
-                message = "Cancelling job...",
-            )
-            runningJob.cancel()
-            delay(120)
-            jobRegistry.updateJob(
-                jobId = jobId,
-                status = JobStatus.CANCELLED,
-                message = "Job cancelled by user.",
-            )
+        runningDemoJobs[jobId]?.let { runningJob ->
+            scope.launch {
+                jobRegistry.updateJob(
+                    jobId = jobId,
+                    status = JobStatus.CANCELLING,
+                    message = "Cancelling job...",
+                )
+                runningJob.cancel()
+                delay(120)
+                jobRegistry.updateJob(
+                    jobId = jobId,
+                    status = JobStatus.CANCELLED,
+                    message = "Job cancelled by user.",
+                )
+            }
+            return
+        }
+
+        if (jobId in runningOperationJobs) {
+            scope.launch {
+                jobRegistry.updateJob(
+                    jobId = jobId,
+                    status = JobStatus.CANCELLING,
+                    message = "Cancelling job...",
+                )
+                if (!fileOperationsGateway.cancel(jobId)) {
+                    jobRegistry.appendLog(jobId, "Cancellation request was not accepted.")
+                }
+            }
         }
     }
 
@@ -192,6 +229,35 @@ class DefaultJobsComponent(
             }
         job.invokeOnCompletion {
             runningDemoJobs.entries.removeIf { (_, runningJob) -> runningJob == job }
+        }
+    }
+
+    private fun applyOperationEvent(
+        jobId: String,
+        event: FileOperationEvent,
+    ) {
+        when (event) {
+            is FileOperationEvent.LogReported -> {
+                jobRegistry.appendLog(jobId, event.message)
+            }
+
+            is FileOperationEvent.ProgressReported -> {
+                val currentStatus = jobRegistry.jobFlow(jobId)?.value?.status ?: JobStatus.RUNNING
+                jobRegistry.updateJob(
+                    jobId = jobId,
+                    status = if (currentStatus == JobStatus.PENDING) JobStatus.RUNNING else currentStatus,
+                    progress = event.progress,
+                )
+            }
+
+            is FileOperationEvent.StatusChanged -> {
+                jobRegistry.updateJob(
+                    jobId = jobId,
+                    status = event.status,
+                    message = event.message,
+                    errorMessage = if (event.status == JobStatus.FAILED) event.message else null,
+                )
+            }
         }
     }
 }

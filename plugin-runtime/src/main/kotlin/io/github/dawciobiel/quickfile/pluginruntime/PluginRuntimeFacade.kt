@@ -32,6 +32,7 @@ data class PluginRuntimePluginSummary(
 interface PluginRuntimeFacade {
     val snapshot: StateFlow<PluginRuntimeSnapshot>
     val browseGateway: BrowseGateway
+    val fileOperationsGateway: FileOperationsGateway
     val discoverySnapshot: PluginRuntimeDiscoverySnapshot
 }
 
@@ -44,6 +45,10 @@ class DemoPluginRuntimeFacade : PluginRuntimeFacade {
     private val selectedBrowsePlugin: DiscoveredPlugin? =
         discoverySnapshot.compatiblePlugins.firstOrNull { plugin ->
             plugin.manifest?.capabilities?.contains("file-source") == true
+        }
+    private val selectedFileOperationsPlugin: DiscoveredPlugin? =
+        discoverySnapshot.compatiblePlugins.firstOrNull { plugin ->
+            plugin.manifest?.capabilities?.contains("file-operations") == true
         }
 
     private val mutableSnapshot =
@@ -68,6 +73,8 @@ class DemoPluginRuntimeFacade : PluginRuntimeFacade {
     override val snapshot: StateFlow<PluginRuntimeSnapshot> = mutableSnapshot.asStateFlow()
     override val browseGateway: BrowseGateway =
         selectedBrowsePlugin?.let(::PluginProcessBrowseGateway) ?: DemoBrowseGateway()
+    override val fileOperationsGateway: FileOperationsGateway =
+        selectedFileOperationsPlugin?.let(::PluginProcessFileOperationsGateway) ?: UnsupportedFileOperationsGateway()
 
     private fun buildScanMessage(discovery: PluginRuntimeDiscoverySnapshot): String {
         if (discovery.discoveredPlugins.isEmpty()) {
@@ -75,13 +82,32 @@ class DemoPluginRuntimeFacade : PluginRuntimeFacade {
         }
 
         if (selectedBrowsePlugin != null) {
-            return "Using file-source plugin ${selectedBrowsePlugin.manifest?.id} for browse requests."
+            val operationsMessage =
+                if (selectedFileOperationsPlugin != null) {
+                    " File operations provided by ${selectedFileOperationsPlugin.manifest?.id}."
+                } else {
+                    " No compatible file-operations plugin detected yet."
+                }
+            return "Using file-source plugin ${selectedBrowsePlugin.manifest?.id} for browse requests.$operationsMessage"
         }
 
         val compatible = discovery.compatiblePlugins.size
         val total = discovery.discoveredPlugins.size
         return "Discovered $total plugin(s), $compatible compatible with host API, but none provide file-source browse."
     }
+}
+
+private class UnsupportedFileOperationsGateway : FileOperationsGateway {
+    override suspend fun startCopy(
+        jobId: String,
+        sourceLocation: String,
+        destinationLocation: String,
+        onEvent: (FileOperationEvent) -> Unit,
+    ) {
+        error("No compatible file-operations plugin is installed.")
+    }
+
+    override suspend fun cancel(jobId: String): Boolean = false
 }
 
 private class DemoBrowseGateway : BrowseGateway {

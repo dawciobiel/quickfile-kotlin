@@ -19,6 +19,8 @@ interface AppComponent {
     val jobs: JobsComponent
     val settings: SettingsComponent
     val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot>
+
+    fun copySelectedFromActivePanel()
 }
 
 class DefaultAppComponent(
@@ -62,6 +64,22 @@ class DefaultAppComponent(
         )
 
     override val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot> = pluginRuntimeFacade.snapshot
+
+    override fun copySelectedFromActivePanel() {
+        val sourcePanel = if (leftPanel.state.value.isActive) leftPanel else rightPanel
+        val targetPanel = if (sourcePanel === leftPanel) rightPanel else leftPanel
+        val sourceState = sourcePanel.state.value
+        val targetState = targetPanel.state.value
+        val selectedEntry =
+            sourceState.entries.firstOrNull { it.name == sourceState.selectedEntryName }
+                ?: return
+
+        jobs.launchCopyJob(
+            entryName = selectedEntry.name,
+            sourceLocation = sourceState.currentLocation,
+            destinationLocation = targetState.currentLocation,
+        )
+    }
 
     private fun seedDemoJobs(jobRegistry: JobRegistry) {
         val completedJob =

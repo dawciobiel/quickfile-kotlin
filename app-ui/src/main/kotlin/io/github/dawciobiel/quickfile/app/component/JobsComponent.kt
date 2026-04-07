@@ -28,6 +28,12 @@ interface JobsComponent {
 
     fun launchDemoJob()
 
+    fun launchCopyJob(
+        entryName: String,
+        sourceLocation: String,
+        destinationLocation: String,
+    )
+
     fun cancelJob(jobId: String)
 }
 
@@ -69,57 +75,34 @@ class DefaultJobsComponent(
 
     override fun launchDemoJob() {
         val demoIndex = ++demoJobCounter
-        val job =
-            scope.launch {
-                val kind = if (demoIndex % 2 == 0) OperationKind.MOVE else OperationKind.COPY
-                val snapshot =
-                    jobRegistry.createJob(
-                        kind = kind,
-                        initialStatus = JobStatus.PENDING,
-                        initialMessage = "Queued demo ${kind.name.lowercase()} job.",
-                    )
-                runningDemoJobs[snapshot.jobId] =
-                    kotlinx.coroutines.currentCoroutineContext()[Job] ?: return@launch
+        val kind = if (demoIndex % 2 == 0) OperationKind.MOVE else OperationKind.COPY
+        scheduleSimulatedJob(
+            kind = kind,
+            queuedMessage = "Queued demo ${kind.name.lowercase()} job.",
+            runningStartMessage = "Preparing source entries...",
+            transferMessage = "Transferring data...",
+            completionMessage = "Job completed successfully.",
+            failureMessage = "I/O error while writing destination file.",
+            failureError = "Destination device stopped responding.",
+            shouldFail = demoIndex % 3 == 0,
+        )
+    }
 
-                delay(250)
-                jobRegistry.updateJob(
-                    jobId = snapshot.jobId,
-                    status = JobStatus.RUNNING,
-                    progress = JobProgress(10, 100, "10%"),
-                    message = "Preparing source entries...",
-                )
-
-                delay(400)
-                jobRegistry.updateJob(
-                    jobId = snapshot.jobId,
-                    status = JobStatus.RUNNING,
-                    progress = JobProgress(55, 100, "55%"),
-                    message = "Transferring data...",
-                )
-
-                delay(400)
-                val shouldFail = demoIndex % 3 == 0
-                if (shouldFail) {
-                    jobRegistry.updateJob(
-                        jobId = snapshot.jobId,
-                        status = JobStatus.FAILED,
-                        progress = JobProgress(72, 100, "72%"),
-                        message = "I/O error while writing destination file.",
-                        errorMessage = "Destination device stopped responding.",
-                    )
-                } else {
-                    jobRegistry.updateJob(
-                        jobId = snapshot.jobId,
-                        status = JobStatus.COMPLETED,
-                        progress = JobProgress(100, 100, "100%"),
-                        message = "Job completed successfully.",
-                    )
-                }
-                runningDemoJobs.remove(snapshot.jobId)
-            }
-        job.invokeOnCompletion {
-            runningDemoJobs.entries.removeIf { (_, runningJob) -> runningJob == job }
-        }
+    override fun launchCopyJob(
+        entryName: String,
+        sourceLocation: String,
+        destinationLocation: String,
+    ) {
+        scheduleSimulatedJob(
+            kind = OperationKind.COPY,
+            queuedMessage = "Queued copy of $entryName to $destinationLocation.",
+            runningStartMessage = "Preparing copy from $sourceLocation",
+            transferMessage = "Copying $entryName to $destinationLocation",
+            completionMessage = "Copied $entryName to $destinationLocation.",
+            failureMessage = "Failed to copy $entryName.",
+            failureError = null,
+            shouldFail = false,
+        )
     }
 
     override fun cancelJob(jobId: String) {
@@ -149,5 +132,66 @@ class DefaultJobsComponent(
         val pending = jobs.count { it.status == JobStatus.PENDING }
         val failed = jobs.count { it.status == JobStatus.FAILED }
         return "${jobs.size} tracked job(s) | running: $running | pending: $pending | failed: $failed"
+    }
+
+    private fun scheduleSimulatedJob(
+        kind: OperationKind,
+        queuedMessage: String,
+        runningStartMessage: String,
+        transferMessage: String,
+        completionMessage: String,
+        failureMessage: String,
+        failureError: String?,
+        shouldFail: Boolean,
+    ) {
+        val job =
+            scope.launch {
+                val snapshot =
+                    jobRegistry.createJob(
+                        kind = kind,
+                        initialStatus = JobStatus.PENDING,
+                        initialMessage = queuedMessage,
+                    )
+                runningDemoJobs[snapshot.jobId] =
+                    kotlinx.coroutines.currentCoroutineContext()[Job] ?: return@launch
+
+                delay(250)
+                jobRegistry.updateJob(
+                    jobId = snapshot.jobId,
+                    status = JobStatus.RUNNING,
+                    progress = JobProgress(10, 100, "10%"),
+                    message = runningStartMessage,
+                )
+
+                delay(400)
+                jobRegistry.updateJob(
+                    jobId = snapshot.jobId,
+                    status = JobStatus.RUNNING,
+                    progress = JobProgress(55, 100, "55%"),
+                    message = transferMessage,
+                )
+
+                delay(400)
+                if (shouldFail) {
+                    jobRegistry.updateJob(
+                        jobId = snapshot.jobId,
+                        status = JobStatus.FAILED,
+                        progress = JobProgress(72, 100, "72%"),
+                        message = failureMessage,
+                        errorMessage = failureError,
+                    )
+                } else {
+                    jobRegistry.updateJob(
+                        jobId = snapshot.jobId,
+                        status = JobStatus.COMPLETED,
+                        progress = JobProgress(100, 100, "100%"),
+                        message = completionMessage,
+                    )
+                }
+                runningDemoJobs.remove(snapshot.jobId)
+            }
+        job.invokeOnCompletion {
+            runningDemoJobs.entries.removeIf { (_, runningJob) -> runningJob == job }
+        }
     }
 }

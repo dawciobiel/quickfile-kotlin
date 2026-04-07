@@ -84,15 +84,15 @@ class DefaultAppComponent(
     override val pendingConfirmation: StateFlow<PendingConfirmation?> = mutablePendingConfirmation.asStateFlow()
 
     override fun copySelectedFromActivePanel() {
-        launchSelectedOperationFromActivePanel(OperationKind.COPY)
+        prepareOperationOrLaunch(OperationKind.COPY)
     }
 
     override fun moveSelectedFromActivePanel() {
-        launchSelectedOperationFromActivePanel(OperationKind.MOVE)
+        prepareOperationOrLaunch(OperationKind.MOVE)
     }
 
     override fun deleteSelectedFromActivePanel() {
-        prepareSelectedOperationConfirmation(OperationKind.DELETE)
+        prepareOperationOrLaunch(OperationKind.DELETE)
     }
 
     override fun confirmPendingOperation() {
@@ -133,19 +133,38 @@ class DefaultAppComponent(
         )
     }
 
-    private fun prepareSelectedOperationConfirmation(kind: OperationKind) {
+    private fun prepareOperationOrLaunch(kind: OperationKind) {
         val sourcePanel = if (leftPanel.state.value.isActive) leftPanel else rightPanel
+        val targetPanel = if (sourcePanel === leftPanel) rightPanel else leftPanel
         val sourceState = sourcePanel.state.value
+        val targetState = targetPanel.state.value
         val selectedEntry =
             sourceState.entries.firstOrNull { it.name == sourceState.selectedEntryName }
                 ?: return
+
+        val targetPath = targetState.currentLocation.let { Path.of(it).resolve(selectedEntry.name) }
+        val confirmationMessage =
+            when {
+                kind == OperationKind.DELETE ->
+                    "Delete ${selectedEntry.name} from ${sourceState.currentLocation}?"
+
+                kind in setOf(OperationKind.COPY, OperationKind.MOVE) && Files.exists(targetPath) ->
+                    "${kind.name.lowercase().replaceFirstChar(Char::uppercase)} will overwrite ${targetPath.fileName} in ${targetState.currentLocation}. Continue?"
+
+                else -> null
+            }
+
+        if (confirmationMessage == null) {
+            launchSelectedOperationFromActivePanel(kind)
+            return
+        }
 
         pendingOperation = { launchSelectedOperationFromActivePanel(kind) }
         mutablePendingConfirmation.value =
             PendingConfirmation(
                 operationKind = kind,
                 entryName = selectedEntry.name,
-                message = "Delete ${selectedEntry.name} from ${sourceState.currentLocation}?",
+                message = confirmationMessage,
             )
     }
 

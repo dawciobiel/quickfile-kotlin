@@ -44,14 +44,27 @@ fun AppContent(component: AppComponent) {
                     Text(
                         text =
                             "Installed plugins: ${runtimeSnapshot.installedPlugins} | " +
+                                "Compatible: ${runtimeSnapshot.compatiblePlugins} | " +
                                 "Running: ${runtimeSnapshot.runningPlugins}",
                         style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = "Plugins directory: ${runtimeSnapshot.pluginsDirectory}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
                         text = runtimeSnapshot.lastScanMessage,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    runtimeSnapshot.discoveredPlugins.forEach { plugin ->
+                        Text(
+                            text = "- ${plugin.id}: ${plugin.status} (${plugin.message})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 

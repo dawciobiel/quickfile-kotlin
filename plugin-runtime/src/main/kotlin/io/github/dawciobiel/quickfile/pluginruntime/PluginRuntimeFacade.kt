@@ -4,6 +4,11 @@ import io.github.dawciobiel.quickfile.core.browse.BrowseGateway
 import io.github.dawciobiel.quickfile.core.browse.BrowseResult
 import io.github.dawciobiel.quickfile.core.panel.PanelEntry
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
+import io.github.dawciobiel.quickfile.pluginruntime.discovery.DiscoveredPlugin
+import io.github.dawciobiel.quickfile.pluginruntime.discovery.FileSystemPluginDiscovery
+import io.github.dawciobiel.quickfile.pluginruntime.discovery.PluginCompatibilityStatus
+import io.github.dawciobiel.quickfile.pluginruntime.discovery.PluginDirectories
+import io.github.dawciobiel.quickfile.pluginruntime.discovery.PluginRuntimeDiscoverySnapshot
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,27 +16,72 @@ import kotlinx.coroutines.flow.asStateFlow
 
 data class PluginRuntimeSnapshot(
     val installedPlugins: Int,
+    val compatiblePlugins: Int,
     val runningPlugins: Int,
     val lastScanMessage: String,
+    val pluginsDirectory: String,
+    val discoveredPlugins: List<PluginRuntimePluginSummary>,
+)
+
+data class PluginRuntimePluginSummary(
+    val id: String,
+    val status: PluginCompatibilityStatus,
+    val message: String,
 )
 
 interface PluginRuntimeFacade {
     val snapshot: StateFlow<PluginRuntimeSnapshot>
     val browseGateway: BrowseGateway
+    val discoverySnapshot: PluginRuntimeDiscoverySnapshot
 }
 
 class DemoPluginRuntimeFacade : PluginRuntimeFacade {
+    override val discoverySnapshot: PluginRuntimeDiscoverySnapshot =
+        FileSystemPluginDiscovery(
+            pluginsDirectory = PluginDirectories.defaultPluginsDirectory(),
+        ).discover()
+
+    private val selectedBrowsePlugin: DiscoveredPlugin? =
+        discoverySnapshot.compatiblePlugins.firstOrNull { plugin ->
+            plugin.manifest?.capabilities?.contains("file-source") == true
+        }
+
     private val mutableSnapshot =
         MutableStateFlow(
             PluginRuntimeSnapshot(
-                installedPlugins = 1,
-                runningPlugins = 1,
-                lastScanMessage = "Demo file-source runtime is active. Real plugin discovery comes next.",
+                installedPlugins = discoverySnapshot.discoveredPlugins.size,
+                compatiblePlugins = discoverySnapshot.compatiblePlugins.size,
+                runningPlugins = if (selectedBrowsePlugin != null) 1 else 0,
+                lastScanMessage = buildScanMessage(discoverySnapshot),
+                pluginsDirectory = discoverySnapshot.pluginsDirectory.toString(),
+                discoveredPlugins =
+                    discoverySnapshot.discoveredPlugins.map { plugin ->
+                        PluginRuntimePluginSummary(
+                            id = plugin.manifest?.id ?: plugin.directory.fileName.toString(),
+                            status = plugin.status,
+                            message = plugin.message,
+                        )
+                    },
             ),
         )
 
     override val snapshot: StateFlow<PluginRuntimeSnapshot> = mutableSnapshot.asStateFlow()
-    override val browseGateway: BrowseGateway = DemoBrowseGateway()
+    override val browseGateway: BrowseGateway =
+        selectedBrowsePlugin?.let(::PluginProcessBrowseGateway) ?: DemoBrowseGateway()
+
+    private fun buildScanMessage(discovery: PluginRuntimeDiscoverySnapshot): String {
+        if (discovery.discoveredPlugins.isEmpty()) {
+            return "No installed plugins found. Using demo browse gateway until runtime launch is implemented."
+        }
+
+        if (selectedBrowsePlugin != null) {
+            return "Using file-source plugin ${selectedBrowsePlugin.manifest?.id} for browse requests."
+        }
+
+        val compatible = discovery.compatiblePlugins.size
+        val total = discovery.discoveredPlugins.size
+        return "Discovered $total plugin(s), $compatible compatible with host API, but none provide file-source browse."
+    }
 }
 
 private class DemoBrowseGateway : BrowseGateway {

@@ -1,0 +1,13 @@
+{
+  "id": "io.github.dawciobiel.local-fs",
+  "version": "0.1.0-SNAPSHOT",
+  "name": "Local Filesystem Provider",
+  "description": "Provides access to the local filesystem.",
+  "apiVersion": "1",
+  "capabilities": ["file-source"],
+  "entrypoint": {
+    "type": "jvm",
+    "mainClass": "io.github.dawciobiel.quickfile.plugins.localfs.LocalFsPluginMainKt",
+    "classpath": ["lib/local-fs-provider-all.jar"]
+  }
+}

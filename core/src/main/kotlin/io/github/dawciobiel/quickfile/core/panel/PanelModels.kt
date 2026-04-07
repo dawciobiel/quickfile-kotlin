@@ -6,12 +6,14 @@ data class PanelState(
     val currentLocation: String,
     val entries: List<PanelEntry>,
     val isActive: Boolean,
+    val isLoading: Boolean = false,
     val statusMessage: String? = null,
 )
 
 data class PanelEntry(
     val name: String,
     val kind: PanelEntryKind,
+    val childLocation: String? = null,
 )
 
 enum class PanelEntryKind {
@@ -23,12 +25,5 @@ sealed interface PanelIntent {
     data object Refresh : PanelIntent
     data class OpenLocation(val location: String) : PanelIntent
     data class SetActive(val active: Boolean) : PanelIntent
-}
-
-interface PanelCoordinator {
-    fun initialState(
-        panelId: String,
-        title: String,
-        active: Boolean,
-    ): PanelState
+    data class OpenEntry(val entry: PanelEntry) : PanelIntent
 }

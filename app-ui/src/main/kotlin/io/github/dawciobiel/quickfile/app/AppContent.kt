@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -124,6 +125,14 @@ private fun PanelCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            OutlinedButton(
+                onClick = {
+                    onActivate()
+                    component.onIntent(PanelIntent.Refresh)
+                },
+            ) {
+                Text(if (state.isLoading) "Refreshing..." else "Refresh")
+            }
             state.statusMessage?.let { message ->
                 Text(
                     text = message,
@@ -138,6 +147,10 @@ private fun PanelCard(
                             Modifier
                                 .fillMaxWidth()
                                 .background(Color(0xFFF9FAFB))
+                                .clickable {
+                                    onActivate()
+                                    component.onIntent(PanelIntent.OpenEntry(entry))
+                                }
                                 .padding(10.dp),
                     ) {
                         val prefix =

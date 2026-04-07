@@ -2,7 +2,6 @@ package io.github.dawciobiel.quickfile.app.component
 
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.decompose.childContext
-import io.github.dawciobiel.quickfile.app.support.DemoPanelCoordinator
 import io.github.dawciobiel.quickfile.pluginruntime.DemoPluginRuntimeFacade
 import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeFacade
 import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeSnapshot
@@ -20,15 +19,14 @@ class DefaultAppComponent(
     componentContext: ComponentContext,
     pluginRuntimeFacade: PluginRuntimeFacade = DemoPluginRuntimeFacade(),
 ) : AppComponent, ComponentContext by componentContext {
-    private val panelCoordinator = DemoPanelCoordinator()
-
     override val leftPanel: PanelComponent =
         DefaultPanelComponent(
             componentContext = childContext(key = "left-panel"),
             panelId = "left",
             title = "Left Panel",
             initiallyActive = true,
-            panelCoordinator = panelCoordinator,
+            initialLocation = "/workspace",
+            browseGateway = pluginRuntimeFacade.browseGateway,
         )
 
     override val rightPanel: PanelComponent =
@@ -37,7 +35,8 @@ class DefaultAppComponent(
             panelId = "right",
             title = "Right Panel",
             initiallyActive = false,
-            panelCoordinator = panelCoordinator,
+            initialLocation = "/downloads",
+            browseGateway = pluginRuntimeFacade.browseGateway,
         )
 
     override val jobs: JobsComponent =

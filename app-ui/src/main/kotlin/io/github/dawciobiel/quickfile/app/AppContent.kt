@@ -56,7 +56,7 @@ fun AppContent(component: AppComponent) {
     val rightPanelState by component.rightPanel.state.collectAsState()
     val activePanelState = if (leftPanelState.isActive) leftPanelState else rightPanelState
     val inactivePanelState = if (leftPanelState.isActive) rightPanelState else leftPanelState
-    val canCopySelected = activePanelState.selectedEntryName != null && !activePanelState.isLoading
+    val hasSelectedEntry = activePanelState.selectedEntryName != null && !activePanelState.isLoading
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF3F4F6)) {
         Column(
@@ -100,19 +100,33 @@ fun AppContent(component: AppComponent) {
                 ) {
                     Text(
                         text =
-                            if (canCopySelected) {
-                                "Copy ${activePanelState.selectedEntryName} -> ${inactivePanelState.currentLocation}"
+                            if (hasSelectedEntry) {
+                                "${activePanelState.selectedEntryName} | copy/move -> ${inactivePanelState.currentLocation} | delete in place"
                             } else {
-                                "Select an entry in the active panel to queue a copy job."
+                                "Select an entry in the active panel to queue a file operation job."
                             },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedButton(
-                        onClick = { component.copySelectedFromActivePanel() },
-                        enabled = canCopySelected,
-                    ) {
-                        Text("Copy Selected")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { component.copySelectedFromActivePanel() },
+                            enabled = hasSelectedEntry,
+                        ) {
+                            Text("Copy")
+                        }
+                        OutlinedButton(
+                            onClick = { component.moveSelectedFromActivePanel() },
+                            enabled = hasSelectedEntry,
+                        ) {
+                            Text("Move")
+                        }
+                        OutlinedButton(
+                            onClick = { component.deleteSelectedFromActivePanel() },
+                            enabled = hasSelectedEntry,
+                        ) {
+                            Text("Delete")
+                        }
                     }
                 }
             }

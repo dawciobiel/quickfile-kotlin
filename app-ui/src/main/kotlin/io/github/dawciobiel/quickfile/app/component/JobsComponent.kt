@@ -30,10 +30,11 @@ interface JobsComponent {
 
     fun launchDemoJob()
 
-    fun launchCopyJob(
+    fun launchFileOperationJob(
+        kind: OperationKind,
         entryName: String,
         sourceLocation: String,
-        destinationLocation: String,
+        destinationLocation: String? = null,
     )
 
     fun cancelJob(jobId: String)
@@ -93,23 +94,31 @@ class DefaultJobsComponent(
         )
     }
 
-    override fun launchCopyJob(
+    override fun launchFileOperationJob(
+        kind: OperationKind,
         entryName: String,
         sourceLocation: String,
-        destinationLocation: String,
+        destinationLocation: String?,
     ) {
         val snapshot =
             jobRegistry.createJob(
-                kind = OperationKind.COPY,
+                kind = kind,
                 initialStatus = JobStatus.PENDING,
-                initialMessage = "Queued copy of $entryName to $destinationLocation.",
+                initialMessage =
+                    when (kind) {
+                        OperationKind.COPY -> "Queued copy of $entryName to $destinationLocation."
+                        OperationKind.MOVE -> "Queued move of $entryName to $destinationLocation."
+                        OperationKind.DELETE -> "Queued delete of $entryName."
+                        else -> "Queued ${kind.name.lowercase()} of $entryName."
+                    },
             )
         runningOperationJobs += snapshot.jobId
 
         scope.launch {
             runCatching {
-                fileOperationsGateway.startCopy(
+                fileOperationsGateway.startOperation(
                     jobId = snapshot.jobId,
+                    kind = kind,
                     sourceLocation = sourceLocation,
                     destinationLocation = destinationLocation,
                 ) { event ->
@@ -119,8 +128,8 @@ class DefaultJobsComponent(
                 jobRegistry.updateJob(
                     jobId = snapshot.jobId,
                     status = JobStatus.FAILED,
-                    message = "Copy execution failed.",
-                    errorMessage = error.message ?: "Unknown copy error.",
+                    message = "${kind.name.lowercase().replaceFirstChar(Char::uppercase)} execution failed.",
+                    errorMessage = error.message ?: "Unknown ${kind.name.lowercase()} error.",
                 )
             }
             runningOperationJobs -= snapshot.jobId

@@ -17,6 +17,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.name
@@ -28,10 +29,10 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
         request: StartOperationRequest,
         responseObserver: StreamObserver<JobUpdate>,
     ) {
-        if (request.kind != OperationKind.OPERATION_KIND_COPY) {
+        if (request.kind !in supportedKinds) {
             responseObserver.onError(
                 Status.UNIMPLEMENTED
-                    .withDescription("Local filesystem provider currently supports only COPY.")
+                    .withDescription("Local filesystem provider supports only COPY, MOVE, and DELETE.")
                     .asRuntimeException(),
             )
             return
@@ -47,13 +48,17 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
         }
 
         val destinationRoot =
-            runCatching { decodeLocation(request.target) }
-                .getOrElse { error ->
-                    responseObserver.onError(
-                        Status.INVALID_ARGUMENT.withDescription(error.message).asRuntimeException(),
-                    )
-                    return
-                }
+            if (request.kind == OperationKind.OPERATION_KIND_DELETE) {
+                null
+            } else {
+                runCatching { decodeLocation(request.target) }
+                    .getOrElse { error ->
+                        responseObserver.onError(
+                            Status.INVALID_ARGUMENT.withDescription(error.message).asRuntimeException(),
+                        )
+                        return
+                    }
+            }
 
         val sources =
             runCatching { request.sourcesList.map(::decodeLocation) }
@@ -70,16 +75,18 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
 
         try {
             responseObserver.onNext(statusUpdate(jobId, JobStatusChanged.Status.STATUS_QUEUED, "Operation accepted."))
-            responseObserver.onNext(statusUpdate(jobId, JobStatusChanged.Status.STATUS_RUNNING, "Copy started."))
+            responseObserver.onNext(
+                statusUpdate(jobId, JobStatusChanged.Status.STATUS_RUNNING, "${request.kind.describe()} started."),
+            )
 
-            Files.createDirectories(destinationRoot)
-            val allItems = sources.flatMap(::collectCopyUnits)
+            destinationRoot?.let(Files::createDirectories)
+            val allItems = sources.flatMap(::collectOperationUnits)
             val totalUnits = allItems.size.toLong().coerceAtLeast(1L)
             var completedUnits = 0L
 
             sources.forEach { sourceRoot ->
-                val destinationBase = destinationRoot.resolve(sourceRoot.fileName.toString())
-                collectCopyUnits(sourceRoot).forEach { sourcePath ->
+                val destinationBase = destinationRoot?.resolve(sourceRoot.fileName.toString())
+                collectOperationUnits(sourceRoot).forEach { sourcePath ->
                     if (cancellationFlag.get()) {
                         responseObserver.onNext(
                             statusUpdate(jobId, JobStatusChanged.Status.STATUS_CANCELLED, "Operation cancelled."),
@@ -89,32 +96,26 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
                     }
 
                     val targetPath =
-                        destinationBase.resolve(
+                        destinationBase?.resolve(
                             sourceRoot.relativize(sourcePath).toString(),
                         )
 
-                    if (Files.isDirectory(sourcePath)) {
-                        Files.createDirectories(targetPath)
-                    } else {
-                        targetPath.parent?.let(Files::createDirectories)
-                        Files.copy(
-                            sourcePath,
-                            targetPath,
-                            StandardCopyOption.REPLACE_EXISTING,
-                            StandardCopyOption.COPY_ATTRIBUTES,
-                        )
-                    }
+                    executeOperation(
+                        kind = request.kind,
+                        sourcePath = sourcePath,
+                        targetPath = targetPath,
+                    )
 
                     completedUnits += 1
                     responseObserver.onNext(
-                        logUpdate(jobId, "Copied ${sourcePath.fileName} -> $targetPath"),
+                        logUpdate(jobId, buildLogMessage(request.kind, sourcePath, targetPath)),
                     )
                     responseObserver.onNext(
                         progressUpdate(
                             jobId = jobId,
                             doneUnits = completedUnits,
                             totalUnits = totalUnits,
-                            phase = "Copying",
+                            phase = request.kind.describe(),
                             currentItemName = sourcePath.name,
                         ),
                     )
@@ -122,18 +123,22 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
             }
 
             responseObserver.onNext(
-                statusUpdate(jobId, JobStatusChanged.Status.STATUS_COMPLETED, "Copy completed successfully."),
+                statusUpdate(jobId, JobStatusChanged.Status.STATUS_COMPLETED, "${request.kind.describe()} completed successfully."),
             )
             responseObserver.onCompleted()
         } catch (error: Exception) {
             responseObserver.onNext(
-                logUpdate(jobId, "Copy failed: ${error.message ?: "Unknown error"}", JobLogLine.Level.LEVEL_ERROR),
+                logUpdate(
+                    jobId,
+                    "${request.kind.describe()} failed: ${error.message ?: "Unknown error"}",
+                    JobLogLine.Level.LEVEL_ERROR,
+                ),
             )
             responseObserver.onNext(
                 statusUpdate(
                     jobId,
                     JobStatusChanged.Status.STATUS_FAILED,
-                    error.message ?: "Copy failed.",
+                    error.message ?: "${request.kind.describe()} failed.",
                 ),
             )
             responseObserver.onCompleted()
@@ -162,12 +167,51 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
         return Path.of(raw).toAbsolutePath().normalize()
     }
 
-    private fun collectCopyUnits(root: Path): List<Path> {
+    private fun collectOperationUnits(root: Path): List<Path> {
         require(root.exists()) { "Source does not exist: $root" }
         return if (root.isDirectory()) {
-            Files.walk(root).use { stream -> stream.toList() }
+            Files.walk(root).use { stream -> stream.toList().sortedByDescending { it.nameCount } }
         } else {
             listOf(root)
+        }
+    }
+
+    private fun executeOperation(
+        kind: OperationKind,
+        sourcePath: Path,
+        targetPath: Path?,
+    ) {
+        when (kind) {
+            OperationKind.OPERATION_KIND_COPY -> {
+                requireNotNull(targetPath) { "COPY requires a target path." }
+                if (Files.isDirectory(sourcePath)) {
+                    Files.createDirectories(targetPath)
+                } else {
+                    targetPath.parent?.let(Files::createDirectories)
+                    Files.copy(
+                        sourcePath,
+                        targetPath,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.COPY_ATTRIBUTES,
+                    )
+                }
+            }
+
+            OperationKind.OPERATION_KIND_MOVE -> {
+                requireNotNull(targetPath) { "MOVE requires a target path." }
+                targetPath.parent?.let(Files::createDirectories)
+                Files.move(
+                    sourcePath,
+                    targetPath,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            }
+
+            OperationKind.OPERATION_KIND_DELETE -> {
+                sourcePath.deleteIfExists()
+            }
+
+            else -> error("Unsupported operation: $kind")
         }
     }
 
@@ -222,4 +266,33 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
                     .setMessage(message)
                     .build(),
             ).build()
+
+    private fun buildLogMessage(
+        kind: OperationKind,
+        sourcePath: Path,
+        targetPath: Path?,
+    ): String =
+        when (kind) {
+            OperationKind.OPERATION_KIND_COPY -> "Copied ${sourcePath.fileName} -> $targetPath"
+            OperationKind.OPERATION_KIND_MOVE -> "Moved ${sourcePath.fileName} -> $targetPath"
+            OperationKind.OPERATION_KIND_DELETE -> "Deleted ${sourcePath.fileName}"
+            else -> "Processed ${sourcePath.fileName}"
+        }
+
+    private companion object {
+        val supportedKinds =
+            setOf(
+                OperationKind.OPERATION_KIND_COPY,
+                OperationKind.OPERATION_KIND_MOVE,
+                OperationKind.OPERATION_KIND_DELETE,
+            )
+    }
 }
+
+private fun OperationKind.describe(): String =
+    when (this) {
+        OperationKind.OPERATION_KIND_COPY -> "Copy"
+        OperationKind.OPERATION_KIND_MOVE -> "Move"
+        OperationKind.OPERATION_KIND_DELETE -> "Delete"
+        else -> name.removePrefix("OPERATION_KIND_")
+    }

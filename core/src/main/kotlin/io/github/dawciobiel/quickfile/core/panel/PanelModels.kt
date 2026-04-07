@@ -9,6 +9,7 @@ data class PanelState(
     val entries: List<PanelEntry>,
     val isActive: Boolean,
     val isLoading: Boolean = false,
+    val selectedEntryName: String? = null,
     val error: BrowseError? = null,
     val statusMessage: String? = null,
 )
@@ -26,7 +27,11 @@ enum class PanelEntryKind {
 
 sealed interface PanelIntent {
     data object Refresh : PanelIntent
+    data object NavigateUp : PanelIntent
+    data class MoveSelection(val offset: Int) : PanelIntent
     data class OpenLocation(val location: String) : PanelIntent
     data class SetActive(val active: Boolean) : PanelIntent
+    data class SelectEntry(val entry: PanelEntry) : PanelIntent
+    data object OpenSelectedEntry : PanelIntent
     data class OpenEntry(val entry: PanelEntry) : PanelIntent
 }

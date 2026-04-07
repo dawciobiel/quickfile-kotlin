@@ -4,6 +4,7 @@ import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.lifecycle.Lifecycle
 import io.github.dawciobiel.quickfile.core.browse.BrowseException
 import io.github.dawciobiel.quickfile.core.browse.BrowseGateway
+import io.github.dawciobiel.quickfile.core.panel.PanelEntry
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
 import io.github.dawciobiel.quickfile.core.panel.PanelIntent
 import io.github.dawciobiel.quickfile.core.panel.PanelState
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.nio.file.Path
 
 interface PanelComponent {
     val state: StateFlow<PanelState>
@@ -43,6 +45,7 @@ class DefaultPanelComponent(
                 entries = emptyList(),
                 isActive = initiallyActive,
                 isLoading = true,
+                selectedEntryName = null,
                 error = null,
                 statusMessage = "Loading directory entries...",
             ),
@@ -69,10 +72,35 @@ class DefaultPanelComponent(
 
             PanelIntent.Refresh -> browse(location = state.value.currentLocation)
 
+            is PanelIntent.MoveSelection -> moveSelection(intent.offset)
+
+            PanelIntent.NavigateUp -> {
+                parentLocation(state.value.currentLocation)?.let(::browse)
+                    ?: mutableState.update { current ->
+                        current.copy(statusMessage = "Already at the top-most location.")
+                    }
+            }
+
             is PanelIntent.SetActive ->
                 mutableState.update { current ->
                     current.copy(isActive = intent.active)
                 }
+
+            is PanelIntent.SelectEntry ->
+                mutableState.update { current ->
+                    current.copy(
+                        selectedEntryName = intent.entry.name,
+                        statusMessage = describeSelection(intent.entry),
+                    )
+                }
+
+            PanelIntent.OpenSelectedEntry -> {
+                val selectedEntry =
+                    state.value.entries.firstOrNull { it.name == state.value.selectedEntryName }
+                selectedEntry?.let { entry ->
+                    onIntent(PanelIntent.OpenEntry(entry))
+                }
+            }
 
             is PanelIntent.OpenEntry -> {
                 if (intent.entry.kind == PanelEntryKind.DIRECTORY) {
@@ -91,6 +119,7 @@ class DefaultPanelComponent(
                 current.copy(
                     currentLocation = location,
                     isLoading = true,
+                    selectedEntryName = null,
                     error = null,
                     statusMessage = "Loading $location ...",
                 )
@@ -100,11 +129,13 @@ class DefaultPanelComponent(
             runCatching {
                 browseGateway.listEntries(location)
             }.onSuccess { result ->
+                val firstEntry = result.entries.firstOrNull()
                 mutableState.update { current ->
                     current.copy(
                         currentLocation = result.location,
                         entries = result.entries,
                         isLoading = false,
+                        selectedEntryName = firstEntry?.name,
                         error = null,
                         statusMessage = "${result.entries.size} entries loaded.",
                     )
@@ -123,6 +154,40 @@ class DefaultPanelComponent(
             }
         }
     }
+
+    private fun parentLocation(location: String): String? =
+        runCatching {
+            Path.of(location).parent?.toString()
+        }.getOrNull()
+
+    private fun moveSelection(offset: Int) {
+        val entries = state.value.entries
+        if (entries.isEmpty()) {
+            return
+        }
+
+        val currentIndex = entries.indexOfFirst { it.name == state.value.selectedEntryName }
+        val nextIndex =
+            when {
+                currentIndex == -1 && offset > 0 -> 0
+                currentIndex == -1 && offset < 0 -> entries.lastIndex
+                else -> (currentIndex + offset).coerceIn(0, entries.lastIndex)
+            }
+
+        val nextEntry = entries[nextIndex]
+        mutableState.update { current ->
+            current.copy(
+                selectedEntryName = nextEntry.name,
+                statusMessage = describeSelection(nextEntry),
+            )
+        }
+    }
+
+    private fun describeSelection(entry: PanelEntry): String =
+        when (entry.kind) {
+            PanelEntryKind.DIRECTORY -> "Selected directory: ${entry.name}"
+            PanelEntryKind.FILE -> "Selected file: ${entry.name}"
+        }
 
     private fun describeBrowseError(error: io.github.dawciobiel.quickfile.core.errors.BrowseError): String =
         when (error) {

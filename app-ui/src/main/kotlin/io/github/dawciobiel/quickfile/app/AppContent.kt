@@ -52,6 +52,11 @@ import io.github.dawciobiel.quickfile.core.panel.PanelIntent
 fun AppContent(component: AppComponent) {
     val runtimeSnapshot by component.pluginRuntimeSnapshot.collectAsState()
     val jobsState by component.jobs.state.collectAsState()
+    val leftPanelState by component.leftPanel.state.collectAsState()
+    val rightPanelState by component.rightPanel.state.collectAsState()
+    val activePanelState = if (leftPanelState.isActive) leftPanelState else rightPanelState
+    val inactivePanelState = if (leftPanelState.isActive) rightPanelState else leftPanelState
+    val canCopySelected = activePanelState.selectedEntryName != null && !activePanelState.isLoading
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF3F4F6)) {
         Column(
@@ -84,6 +89,30 @@ fun AppContent(component: AppComponent) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                }
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text =
+                            if (canCopySelected) {
+                                "Copy ${activePanelState.selectedEntryName} -> ${inactivePanelState.currentLocation}"
+                            } else {
+                                "Select an entry in the active panel to queue a copy job."
+                            },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(
+                        onClick = { component.copySelectedFromActivePanel() },
+                        enabled = canCopySelected,
+                    ) {
+                        Text("Copy Selected")
                     }
                 }
             }

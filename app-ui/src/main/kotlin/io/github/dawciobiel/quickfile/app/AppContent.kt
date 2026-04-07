@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -144,6 +145,9 @@ fun AppContent(component: AppComponent) {
                 PanelCard(
                     modifier = Modifier.weight(1f),
                     component = component.leftPanel,
+                    onCopy = { component.copySelectedFromActivePanel() },
+                    onMove = { component.moveSelectedFromActivePanel() },
+                    onDelete = { component.deleteSelectedFromActivePanel() },
                     onActivate = {
                         component.leftPanel.onIntent(PanelIntent.SetActive(true))
                         component.rightPanel.onIntent(PanelIntent.SetActive(false))
@@ -152,6 +156,9 @@ fun AppContent(component: AppComponent) {
                 PanelCard(
                     modifier = Modifier.weight(1f),
                     component = component.rightPanel,
+                    onCopy = { component.copySelectedFromActivePanel() },
+                    onMove = { component.moveSelectedFromActivePanel() },
+                    onDelete = { component.deleteSelectedFromActivePanel() },
                     onActivate = {
                         component.leftPanel.onIntent(PanelIntent.SetActive(false))
                         component.rightPanel.onIntent(PanelIntent.SetActive(true))
@@ -255,6 +262,9 @@ private fun JobsFilterChip(
 private fun PanelCard(
     modifier: Modifier = Modifier,
     component: io.github.dawciobiel.quickfile.app.component.PanelComponent,
+    onCopy: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit,
     onActivate: () -> Unit,
 ) {
     val state by component.state.collectAsState()
@@ -291,6 +301,29 @@ private fun PanelCard(
                         }
 
                         when (event.key) {
+                            Key.C -> {
+                                if (event.isCtrlPressed) {
+                                    onCopy()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+
+                            Key.M -> {
+                                if (event.isCtrlPressed) {
+                                    onMove()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+
+                            Key.Delete -> {
+                                onDelete()
+                                true
+                            }
+
                             Key.DirectionDown -> {
                                 component.onIntent(PanelIntent.MoveSelection(1))
                                 true

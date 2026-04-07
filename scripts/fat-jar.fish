@@ -1,5 +1,10 @@
 #!/usr/bin/env fish
 
+# QuickFile helper: build an OS-specific Compose Desktop uber jar.
+#
+# Usage:
+#   ./scripts/fat-jar.fish
+
 set -x TERM xterm-256color
 
 clear

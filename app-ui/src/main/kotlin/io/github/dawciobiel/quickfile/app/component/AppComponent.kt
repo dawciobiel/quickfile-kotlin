@@ -2,6 +2,10 @@ package io.github.dawciobiel.quickfile.app.component
 
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.decompose.childContext
+import io.github.dawciobiel.quickfile.core.jobs.InMemoryJobRegistry
+import io.github.dawciobiel.quickfile.core.jobs.JobRegistry
+import io.github.dawciobiel.quickfile.core.jobs.JobStatus
+import io.github.dawciobiel.quickfile.core.jobs.OperationKind
 import io.github.dawciobiel.quickfile.pluginruntime.DemoPluginRuntimeFacade
 import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeFacade
 import io.github.dawciobiel.quickfile.pluginruntime.PluginRuntimeSnapshot
@@ -21,6 +25,7 @@ class DefaultAppComponent(
     componentContext: ComponentContext,
     pluginRuntimeFacade: PluginRuntimeFacade = DemoPluginRuntimeFacade(),
 ) : AppComponent, ComponentContext by componentContext {
+    private val jobRegistry: JobRegistry = InMemoryJobRegistry().also(::seedDemoJobs)
     private val defaultHome = Path.of(System.getProperty("user.home")).toAbsolutePath().normalize()
     private val defaultDownloads =
         defaultHome.resolve("Downloads").takeIf { Files.isDirectory(it) } ?: defaultHome
@@ -48,6 +53,7 @@ class DefaultAppComponent(
     override val jobs: JobsComponent =
         DefaultJobsComponent(
             componentContext = childContext(key = "jobs"),
+            jobRegistry = jobRegistry,
         )
 
     override val settings: SettingsComponent =
@@ -56,4 +62,31 @@ class DefaultAppComponent(
         )
 
     override val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot> = pluginRuntimeFacade.snapshot
+
+    private fun seedDemoJobs(jobRegistry: JobRegistry) {
+        val completedJob =
+            jobRegistry.createJob(
+                kind = OperationKind.COPY,
+                initialStatus = JobStatus.COMPLETED,
+                initialMessage = "Copied 24 files to Downloads.",
+            )
+        jobRegistry.appendLog(completedJob.jobId, "Copy job completed successfully.")
+
+        val runningJob =
+            jobRegistry.createJob(
+                kind = OperationKind.ARCHIVE,
+                initialStatus = JobStatus.RUNNING,
+                initialMessage = "Archiving selected files...",
+            )
+        jobRegistry.updateJob(
+            jobId = runningJob.jobId,
+            status = JobStatus.RUNNING,
+            progress = io.github.dawciobiel.quickfile.core.jobs.JobProgress(
+                completedUnits = 48,
+                totalUnits = 100,
+                details = "48%",
+            ),
+            message = "Compressing files into backup.zip",
+        )
+    }
 }

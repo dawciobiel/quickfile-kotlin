@@ -42,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.dawciobiel.quickfile.app.component.AppComponent
 import io.github.dawciobiel.quickfile.core.errors.BrowseError
+import io.github.dawciobiel.quickfile.core.jobs.JobSnapshot
+import io.github.dawciobiel.quickfile.core.jobs.JobStatus
 import io.github.dawciobiel.quickfile.core.panel.PanelEntry
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
 import io.github.dawciobiel.quickfile.core.panel.PanelIntent
@@ -115,6 +117,14 @@ fun AppContent(component: AppComponent) {
                         text = jobsState.summary,
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        jobsState.jobs.forEach { job ->
+                            JobRow(job)
+                        }
+                    }
                 }
             }
         }
@@ -399,4 +409,54 @@ private fun buildPanelFooter(state: io.github.dawciobiel.quickfile.core.panel.Pa
     val selection =
         state.selectedEntryName?.let { "Selected: $it" } ?: "Selected: none"
     return "${state.entries.size} entries | $selection"
+}
+
+@Composable
+private fun JobRow(job: JobSnapshot) {
+    val statusColor =
+        when (job.status) {
+            JobStatus.COMPLETED -> Color(0xFF067647)
+            JobStatus.RUNNING -> Color(0xFF175CD3)
+            JobStatus.FAILED -> Color(0xFFB42318)
+            JobStatus.CANCELLED -> Color(0xFF7A5AF8)
+            JobStatus.CANCELLING -> Color(0xFFB54708)
+            JobStatus.PENDING -> Color(0xFF475467)
+        }
+
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF9FAFB))
+                .padding(10.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "${job.kind} · ${job.status}",
+                style = MaterialTheme.typography.labelLarge,
+                color = statusColor,
+                fontWeight = FontWeight.Bold,
+            )
+            job.progress?.let { progress ->
+                Text(
+                    text = "Progress: ${progress.completedUnits}/${progress.totalUnits} ${progress.details.orEmpty()}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            job.recentLogLines.lastOrNull()?.let { logLine ->
+                Text(
+                    text = logLine.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            job.errorMessage?.let { error ->
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFB42318),
+                )
+            }
+        }
+    }
 }

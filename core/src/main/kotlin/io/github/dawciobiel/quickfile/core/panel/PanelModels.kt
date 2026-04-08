@@ -7,6 +7,7 @@ data class PanelState(
     val title: String,
     val currentLocation: String,
     val entries: List<PanelEntry>,
+    val sortMode: PanelSortMode = PanelSortMode.NAME_ASC,
     val isActive: Boolean,
     val isLoading: Boolean = false,
     val selectedEntryName: String? = null,
@@ -25,9 +26,15 @@ enum class PanelEntryKind {
     FILE,
 }
 
+enum class PanelSortMode {
+    NAME_ASC,
+    NAME_DESC,
+}
+
 sealed interface PanelIntent {
     data object Refresh : PanelIntent
     data object NavigateUp : PanelIntent
+    data object ToggleSort : PanelIntent
     data class MoveSelection(val offset: Int) : PanelIntent
     data class OpenLocation(val location: String) : PanelIntent
     data class SetActive(val active: Boolean) : PanelIntent

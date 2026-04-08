@@ -53,6 +53,7 @@ import io.github.dawciobiel.quickfile.core.jobs.JobStatus
 import io.github.dawciobiel.quickfile.core.panel.PanelEntry
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
 import io.github.dawciobiel.quickfile.core.panel.PanelIntent
+import io.github.dawciobiel.quickfile.core.panel.PanelSortMode
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -412,6 +413,19 @@ private fun PanelCard(
                     },
                 ) {
                     Text(if (state.isLoading) "Refreshing..." else "Refresh")
+                }
+                OutlinedButton(
+                    onClick = {
+                        onActivate()
+                        component.onIntent(PanelIntent.ToggleSort)
+                    },
+                ) {
+                    Text(
+                        when (state.sortMode) {
+                            PanelSortMode.NAME_ASC -> "Name ↑"
+                            PanelSortMode.NAME_DESC -> "Name ↓"
+                        },
+                    )
                 }
             }
             state.statusMessage?.let { message ->

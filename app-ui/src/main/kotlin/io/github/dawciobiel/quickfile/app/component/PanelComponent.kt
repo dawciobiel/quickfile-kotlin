@@ -7,6 +7,7 @@ import io.github.dawciobiel.quickfile.core.browse.BrowseGateway
 import io.github.dawciobiel.quickfile.core.panel.PanelEntry
 import io.github.dawciobiel.quickfile.core.panel.PanelEntryKind
 import io.github.dawciobiel.quickfile.core.panel.PanelIntent
+import io.github.dawciobiel.quickfile.core.panel.PanelSortMode
 import io.github.dawciobiel.quickfile.core.panel.PanelState
 import io.github.dawciobiel.quickfile.pluginruntime.PluginProcessBrowseGateway
 import kotlinx.coroutines.CoroutineScope
@@ -75,6 +76,21 @@ class DefaultPanelComponent(
 
             is PanelIntent.MoveSelection -> moveSelection(intent.offset)
 
+            PanelIntent.ToggleSort ->
+                mutableState.update { current ->
+                    val nextSortMode =
+                        when (current.sortMode) {
+                            PanelSortMode.NAME_ASC -> PanelSortMode.NAME_DESC
+                            PanelSortMode.NAME_DESC -> PanelSortMode.NAME_ASC
+                        }
+                    current.copy(
+                        sortMode = nextSortMode,
+                        entries = current.entries.sortedFor(nextSortMode),
+                        selectedEntryName = current.selectedEntryName,
+                        statusMessage = "Sorting by name ${if (nextSortMode == PanelSortMode.NAME_ASC) "ascending" else "descending"}.",
+                    )
+                }
+
             PanelIntent.NavigateUp -> {
                 parentLocation(state.value.currentLocation)?.let(::browse)
                     ?: mutableState.update { current ->
@@ -130,15 +146,16 @@ class DefaultPanelComponent(
             runCatching {
                 browseGateway.listEntries(location)
             }.onSuccess { result ->
-                val firstEntry = result.entries.firstOrNull()
+                val sortedEntries = result.entries.sortedFor(state.value.sortMode)
+                val firstEntry = sortedEntries.firstOrNull()
                 mutableState.update { current ->
                     current.copy(
                         currentLocation = result.location,
-                        entries = result.entries,
+                        entries = sortedEntries,
                         isLoading = false,
                         selectedEntryName = firstEntry?.name,
                         error = null,
-                        statusMessage = "${result.entries.size} entries loaded.",
+                        statusMessage = "${sortedEntries.size} entries loaded.",
                     )
                 }
                 onLocationChanged(result.location)
@@ -208,4 +225,18 @@ class DefaultPanelComponent(
             is io.github.dawciobiel.quickfile.core.errors.BrowseError.Unknown ->
                 "Browse failed: ${error.message}"
         }
+}
+
+private fun List<PanelEntry>.sortedFor(sortMode: PanelSortMode): List<PanelEntry> {
+    val comparator =
+        compareBy<PanelEntry>({ it.kind != PanelEntryKind.DIRECTORY }, { it.name.lowercase() })
+
+    return when (sortMode) {
+        PanelSortMode.NAME_ASC -> this.sortedWith(comparator)
+        PanelSortMode.NAME_DESC ->
+            this.sortedWith(
+                compareBy<PanelEntry>({ it.kind != PanelEntryKind.DIRECTORY })
+                    .thenByDescending { it.name.lowercase() },
+            )
+    }
 }

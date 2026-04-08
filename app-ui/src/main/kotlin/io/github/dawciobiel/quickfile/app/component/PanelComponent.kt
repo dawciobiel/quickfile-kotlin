@@ -83,10 +83,16 @@ class DefaultPanelComponent(
                             PanelSortMode.NAME_ASC -> PanelSortMode.NAME_DESC
                             PanelSortMode.NAME_DESC -> PanelSortMode.NAME_ASC
                         }
+                    val sortedEntries = current.entries.sortedFor(nextSortMode)
+                    val selectedEntryName =
+                        sortedEntries
+                            .firstOrNull { it.name == current.selectedEntryName }
+                            ?.name
+                            ?: sortedEntries.firstOrNull()?.name
                     current.copy(
                         sortMode = nextSortMode,
-                        entries = current.entries.sortedFor(nextSortMode),
-                        selectedEntryName = current.selectedEntryName,
+                        entries = sortedEntries,
+                        selectedEntryName = selectedEntryName,
                         statusMessage = "Sorting by name ${if (nextSortMode == PanelSortMode.NAME_ASC) "ascending" else "descending"}.",
                     )
                 }
@@ -146,14 +152,19 @@ class DefaultPanelComponent(
             runCatching {
                 browseGateway.listEntries(location)
             }.onSuccess { result ->
+                val previousSelection = state.value.selectedEntryName
                 val sortedEntries = result.entries.sortedFor(state.value.sortMode)
-                val firstEntry = sortedEntries.firstOrNull()
+                val selectedEntryName =
+                    sortedEntries
+                        .firstOrNull { it.name == previousSelection }
+                        ?.name
+                        ?: sortedEntries.firstOrNull()?.name
                 mutableState.update { current ->
                     current.copy(
                         currentLocation = result.location,
                         entries = sortedEntries,
                         isLoading = false,
-                        selectedEntryName = firstEntry?.name,
+                        selectedEntryName = selectedEntryName,
                         error = null,
                         statusMessage = "${sortedEntries.size} entries loaded.",
                     )

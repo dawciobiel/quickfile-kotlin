@@ -11,15 +11,16 @@ import java.nio.file.Path
 
 enum class ActionId(
     val configKey: String,
+    val displayName: String,
 ) {
-    PANEL_SWITCH("panel.switch"),
-    PANEL_COPY("panel.copy"),
-    PANEL_MOVE("panel.move"),
-    PANEL_DELETE("panel.delete"),
-    PANEL_SELECT_NEXT("panel.selectNext"),
-    PANEL_SELECT_PREVIOUS("panel.selectPrevious"),
-    PANEL_OPEN_SELECTED("panel.openSelected"),
-    PANEL_NAVIGATE_UP("panel.navigateUp"),
+    PANEL_SWITCH("panel.switch", "Switch active panel"),
+    PANEL_COPY("panel.copy", "Copy selected entry"),
+    PANEL_MOVE("panel.move", "Move selected entry"),
+    PANEL_DELETE("panel.delete", "Delete selected entry"),
+    PANEL_SELECT_NEXT("panel.selectNext", "Select next entry"),
+    PANEL_SELECT_PREVIOUS("panel.selectPrevious", "Select previous entry"),
+    PANEL_OPEN_SELECTED("panel.openSelected", "Open selected entry"),
+    PANEL_NAVIGATE_UP("panel.navigateUp", "Open parent directory"),
     ;
 
     companion object {
@@ -48,17 +49,39 @@ data class Shortcut(
     }
 }
 
+enum class ShortcutSource {
+    DEFAULT,
+    USER_OVERRIDE,
+}
+
+data class KeyBindingView(
+    val actionId: ActionId,
+    val shortcut: Shortcut,
+    val source: ShortcutSource,
+)
+
 object AppKeymap {
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val shortcuts: Map<ActionId, Shortcut> =
+    private val defaultShortcuts: Map<ActionId, Shortcut> =
         loadDefaultShortcuts()
-            ?.let { defaults ->
-                defaults + loadUserOverrides(userKeymapPath())
-            }?.takeIf { loaded -> loaded.keys.containsAll(ActionId.entries) }
+            ?.takeIf { loaded -> loaded.keys.containsAll(ActionId.entries) }
             ?: fallbackShortcuts()
 
+    private val userOverrides: Map<ActionId, Shortcut> = loadUserOverrides(userKeymapPath())
+
+    private val shortcuts: Map<ActionId, Shortcut> = defaultShortcuts + userOverrides
+
     fun shortcutFor(actionId: ActionId): Shortcut = requireNotNull(shortcuts[actionId])
+
+    fun bindings(): List<KeyBindingView> =
+        ActionId.entries.map { actionId ->
+            KeyBindingView(
+                actionId = actionId,
+                shortcut = shortcutFor(actionId),
+                source = if (userOverrides.containsKey(actionId)) ShortcutSource.USER_OVERRIDE else ShortcutSource.DEFAULT,
+            )
+        }
 
     fun matches(
         actionId: ActionId,

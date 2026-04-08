@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.dawciobiel.quickfile.app.component.AppComponent
 import io.github.dawciobiel.quickfile.app.component.JobsFilter
+import io.github.dawciobiel.quickfile.app.component.PendingRename
 import io.github.dawciobiel.quickfile.app.keymap.ActionId
 import io.github.dawciobiel.quickfile.app.keymap.AppKeymap
 import io.github.dawciobiel.quickfile.app.keymap.KeyBindingView
@@ -64,6 +65,7 @@ fun AppContent(component: AppComponent) {
     val runtimeSnapshot by component.pluginRuntimeSnapshot.collectAsState()
     val jobsState by component.jobs.state.collectAsState()
     val pendingConfirmation by component.pendingConfirmation.collectAsState()
+    val pendingRename by component.pendingRename.collectAsState()
     val leftPanelState by component.leftPanel.state.collectAsState()
     val rightPanelState by component.rightPanel.state.collectAsState()
     val settingsState by component.settings.state.collectAsState()
@@ -138,6 +140,12 @@ fun AppContent(component: AppComponent) {
                             Text("Move (${shortcutLabel(ActionId.PANEL_MOVE)})")
                         }
                         OutlinedButton(
+                            onClick = { component.renameSelectedFromActivePanel() },
+                            enabled = hasSelectedEntry,
+                        ) {
+                            Text("Rename (${shortcutLabel(ActionId.PANEL_RENAME)})")
+                        }
+                        OutlinedButton(
                             onClick = { component.deleteSelectedFromActivePanel() },
                             enabled = hasSelectedEntry,
                         ) {
@@ -156,6 +164,7 @@ fun AppContent(component: AppComponent) {
                     component = component.leftPanel,
                     onCopy = { component.copySelectedFromActivePanel() },
                     onMove = { component.moveSelectedFromActivePanel() },
+                    onRename = { component.renameSelectedFromActivePanel() },
                     onDelete = { component.deleteSelectedFromActivePanel() },
                     onSwitchPanel = { component.switchActivePanel() },
                     onActivate = {
@@ -168,6 +177,7 @@ fun AppContent(component: AppComponent) {
                     component = component.rightPanel,
                     onCopy = { component.copySelectedFromActivePanel() },
                     onMove = { component.moveSelectedFromActivePanel() },
+                    onRename = { component.renameSelectedFromActivePanel() },
                     onDelete = { component.deleteSelectedFromActivePanel() },
                     onSwitchPanel = { component.switchActivePanel() },
                     onActivate = {
@@ -314,6 +324,7 @@ fun AppContent(component: AppComponent) {
                     ) {
                         ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_COPY), label = "Copy")
                         ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_MOVE), label = "Move")
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_RENAME), label = "Rename")
                         ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_DELETE), label = "Delete")
                     }
                 }
@@ -335,6 +346,16 @@ fun AppContent(component: AppComponent) {
                 TextButton(onClick = { component.dismissPendingConfirmation() }) {
                     Text("Cancel")
                 }
+            },
+        )
+    }
+
+    pendingRename?.let { rename ->
+        RenameDialog(
+            pendingRename = rename,
+            onCancel = { component.dismissPendingRename() },
+            onConfirm = { newName ->
+                component.confirmRename(newName)
             },
         )
     }
@@ -498,12 +519,56 @@ private fun JobsFilterChip(
 }
 
 @Composable
+private fun RenameDialog(
+    pendingRename: PendingRename,
+    onCancel: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var renameInput by remember(pendingRename) { mutableStateOf(pendingRename.entryName) }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Rename Entry") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Current name: ${pendingRename.entryName}")
+                Text(
+                    text = "Location: ${pendingRename.parentLocation}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextField(
+                    value = renameInput,
+                    onValueChange = { renameInput = it },
+                    singleLine = true,
+                    label = { Text("New name") },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(renameInput) },
+                enabled = renameInput.trim().isNotBlank(),
+            ) {
+                Text("Rename")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun PanelCard(
     modifier: Modifier = Modifier,
     component: io.github.dawciobiel.quickfile.app.component.PanelComponent,
     onCopy: () -> Unit,
     onMove: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit,
     onSwitchPanel: () -> Unit,
     onActivate: () -> Unit,
@@ -554,6 +619,11 @@ private fun PanelCard(
 
                             AppKeymap.matches(ActionId.PANEL_MOVE, event) -> {
                                 onMove()
+                                true
+                            }
+
+                            AppKeymap.matches(ActionId.PANEL_RENAME, event) -> {
+                                onRename()
                                 true
                             }
 

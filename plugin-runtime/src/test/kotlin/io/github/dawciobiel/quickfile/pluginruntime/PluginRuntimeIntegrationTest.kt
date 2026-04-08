@@ -147,6 +147,34 @@ class PluginRuntimeIntegrationTest {
         }
     }
 
+    @Test
+    fun `file operations gateway renames file in place`() {
+        val discoveredPlugin = discoverReferencePlugin()
+        val sourceRoot = Files.createTempDirectory("quickfile-rename-source")
+        val sourceFile = sourceRoot.resolve("rename-me.txt")
+        val renamedFile = sourceRoot.resolve("renamed.txt")
+        Files.writeString(sourceFile, "QuickFile integration rename test")
+
+        val gateway = PluginProcessFileOperationsGateway(discoveredPlugin)
+        try {
+            runBlocking {
+                gateway.startOperation(
+                    jobId = "rename-test-job",
+                    kind = OperationKind.RENAME,
+                    sourceLocation = sourceFile.toString(),
+                    destinationLocation = renamedFile.toString(),
+                    onEvent = {},
+                )
+            }
+
+            assertTrue(sourceFile.notExists())
+            assertTrue(renamedFile.exists())
+            assertEquals("QuickFile integration rename test", renamedFile.readText())
+        } finally {
+            gateway.close()
+        }
+    }
+
     private fun discoverReferencePlugin() =
         FileSystemPluginDiscovery(
             pluginsDirectory = installReferencePlugin().parent,

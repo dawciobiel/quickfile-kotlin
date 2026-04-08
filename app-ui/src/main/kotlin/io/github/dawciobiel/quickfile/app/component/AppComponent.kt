@@ -23,10 +23,14 @@ interface AppComponent {
     val settings: SettingsComponent
     val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot>
     val pendingConfirmation: StateFlow<PendingConfirmation?>
+    val pendingRename: StateFlow<PendingRename?>
 
     fun copySelectedFromActivePanel()
     fun moveSelectedFromActivePanel()
+    fun renameSelectedFromActivePanel()
     fun deleteSelectedFromActivePanel()
+    fun confirmRename(newName: String)
+    fun dismissPendingRename()
     fun confirmPendingOperation()
     fun dismissPendingConfirmation()
     fun switchActivePanel()
@@ -36,6 +40,12 @@ data class PendingConfirmation(
     val operationKind: OperationKind,
     val entryName: String,
     val message: String,
+)
+
+data class PendingRename(
+    val entryName: String,
+    val sourceLocation: String,
+    val parentLocation: String,
 )
 
 class DefaultAppComponent(
@@ -50,6 +60,7 @@ class DefaultAppComponent(
     private val initialLeftLocation = preferences.get("leftPanelLocation", defaultHome.toString())
     private val initialRightLocation = preferences.get("rightPanelLocation", defaultDownloads.toString())
     private val mutablePendingConfirmation = MutableStateFlow<PendingConfirmation?>(null)
+    private val mutablePendingRename = MutableStateFlow<PendingRename?>(null)
     private var pendingOperation: (() -> Unit)? = null
 
     override val leftPanel: PanelComponent =
@@ -89,6 +100,7 @@ class DefaultAppComponent(
 
     override val pluginRuntimeSnapshot: StateFlow<PluginRuntimeSnapshot> = pluginRuntimeFacade.snapshot
     override val pendingConfirmation: StateFlow<PendingConfirmation?> = mutablePendingConfirmation.asStateFlow()
+    override val pendingRename: StateFlow<PendingRename?> = mutablePendingRename.asStateFlow()
 
     override fun copySelectedFromActivePanel() {
         prepareOperationOrLaunch(OperationKind.COPY)
@@ -98,8 +110,44 @@ class DefaultAppComponent(
         prepareOperationOrLaunch(OperationKind.MOVE)
     }
 
+    override fun renameSelectedFromActivePanel() {
+        val sourcePanel = if (leftPanel.state.value.isActive) leftPanel else rightPanel
+        val sourceState = sourcePanel.state.value
+        val selectedEntry =
+            sourceState.entries.firstOrNull { it.name == sourceState.selectedEntryName }
+                ?: return
+        val sourceLocation =
+            selectedEntry.childLocation
+                ?: Path.of(sourceState.currentLocation).resolve(selectedEntry.name).toString()
+
+        mutablePendingRename.value =
+            PendingRename(
+                entryName = selectedEntry.name,
+                sourceLocation = sourceLocation,
+                parentLocation = sourceState.currentLocation,
+            )
+    }
+
     override fun deleteSelectedFromActivePanel() {
         prepareOperationOrLaunch(OperationKind.DELETE)
+    }
+
+    override fun confirmRename(newName: String) {
+        val rename = mutablePendingRename.value ?: return
+        val trimmedName = newName.trim()
+        if (trimmedName.isBlank()) {
+            return
+        }
+
+        mutablePendingRename.value = null
+        prepareRenameOrLaunch(
+            rename = rename,
+            newName = trimmedName,
+        )
+    }
+
+    override fun dismissPendingRename() {
+        mutablePendingRename.value = null
     }
 
     override fun confirmPendingOperation() {
@@ -146,6 +194,19 @@ class DefaultAppComponent(
         )
     }
 
+    private fun launchRename(
+        sourceLocation: String,
+        currentName: String,
+        targetLocation: String,
+    ) {
+        jobs.launchFileOperationJob(
+            kind = OperationKind.RENAME,
+            entryName = currentName,
+            sourceLocation = sourceLocation,
+            destinationLocation = targetLocation,
+        )
+    }
+
     private fun prepareOperationOrLaunch(kind: OperationKind) {
         val sourcePanel = if (leftPanel.state.value.isActive) leftPanel else rightPanel
         val targetPanel = if (sourcePanel === leftPanel) rightPanel else leftPanel
@@ -177,6 +238,47 @@ class DefaultAppComponent(
             PendingConfirmation(
                 operationKind = kind,
                 entryName = selectedEntry.name,
+                message = confirmationMessage,
+            )
+    }
+
+    private fun prepareRenameOrLaunch(
+        rename: PendingRename,
+        newName: String,
+    ) {
+        val sourcePath = Path.of(rename.sourceLocation)
+        val targetPath = Path.of(rename.parentLocation).resolve(newName).normalize()
+        if (sourcePath == targetPath) {
+            return
+        }
+
+        val confirmationMessage =
+            if (Files.exists(targetPath)) {
+                "Rename will overwrite ${targetPath.fileName} in ${rename.parentLocation}. Continue?"
+            } else {
+                null
+            }
+
+        if (confirmationMessage == null) {
+            launchRename(
+                sourceLocation = rename.sourceLocation,
+                currentName = rename.entryName,
+                targetLocation = targetPath.toString(),
+            )
+            return
+        }
+
+        pendingOperation = {
+            launchRename(
+                sourceLocation = rename.sourceLocation,
+                currentName = rename.entryName,
+                targetLocation = targetPath.toString(),
+            )
+        }
+        mutablePendingConfirmation.value =
+            PendingConfirmation(
+                operationKind = OperationKind.RENAME,
+                entryName = rename.entryName,
                 message = confirmationMessage,
             )
     }

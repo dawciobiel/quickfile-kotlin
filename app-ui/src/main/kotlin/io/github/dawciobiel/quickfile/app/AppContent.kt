@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +70,9 @@ fun AppContent(component: AppComponent) {
     val activePanelState = if (leftPanelState.isActive) leftPanelState else rightPanelState
     val inactivePanelState = if (leftPanelState.isActive) rightPanelState else leftPanelState
     val hasSelectedEntry = activePanelState.selectedEntryName != null && !activePanelState.isLoading
+    val keyBindingsByAction = remember(settingsState.keyBindings) { settingsState.keyBindings.associateBy { it.actionId } }
+
+    fun shortcutLabel(actionId: ActionId): String = keyBindingsByAction[actionId]?.shortcut?.label() ?: AppKeymap.shortcutFor(actionId).label()
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF3F4F6)) {
         Column(
@@ -125,19 +129,19 @@ fun AppContent(component: AppComponent) {
                             onClick = { component.copySelectedFromActivePanel() },
                             enabled = hasSelectedEntry,
                         ) {
-                            Text("Copy (${AppKeymap.shortcutFor(ActionId.PANEL_COPY).label()})")
+                            Text("Copy (${shortcutLabel(ActionId.PANEL_COPY)})")
                         }
                         OutlinedButton(
                             onClick = { component.moveSelectedFromActivePanel() },
                             enabled = hasSelectedEntry,
                         ) {
-                            Text("Move (${AppKeymap.shortcutFor(ActionId.PANEL_MOVE).label()})")
+                            Text("Move (${shortcutLabel(ActionId.PANEL_MOVE)})")
                         }
                         OutlinedButton(
                             onClick = { component.deleteSelectedFromActivePanel() },
                             enabled = hasSelectedEntry,
                         ) {
-                            Text("Delete (${AppKeymap.shortcutFor(ActionId.PANEL_DELETE).label()})")
+                            Text("Delete (${shortcutLabel(ActionId.PANEL_DELETE)})")
                         }
                     }
                 }
@@ -243,9 +247,25 @@ fun AppContent(component: AppComponent) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Text(
+                        text = "User keymap file: ${settingsState.keymapPath}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    settingsState.message?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         settingsState.keyBindings.forEach { binding ->
-                            KeyBindingRow(binding = binding)
+                            KeyBindingRow(
+                                binding = binding,
+                                onEdit = { component.settings.startEditing(binding.actionId) },
+                                onReset = { component.settings.resetShortcut(binding.actionId) },
+                            )
                         }
                     }
                 }
@@ -270,10 +290,27 @@ fun AppContent(component: AppComponent) {
             },
         )
     }
+
+    settingsState.editingActionId?.let { actionId ->
+        ShortcutCaptureDialog(
+            actionId = actionId,
+            onCancel = { component.settings.cancelEditing() },
+            onShortcutCaptured = { shortcut ->
+                component.settings.applyShortcut(shortcut)
+            },
+            onUnsupportedShortcut = { keyLabel ->
+                component.settings.showUnsupportedShortcut(keyLabel)
+            },
+        )
+    }
 }
 
 @Composable
-private fun KeyBindingRow(binding: KeyBindingView) {
+private fun KeyBindingRow(
+    binding: KeyBindingView,
+    onEdit: () -> Unit,
+    onReset: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -297,13 +334,88 @@ private fun KeyBindingRow(binding: KeyBindingView) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(
-            text = binding.shortcut.label(),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = binding.shortcut.label(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            OutlinedButton(onClick = onEdit) {
+                Text("Edit")
+            }
+            OutlinedButton(
+                onClick = onReset,
+                enabled = binding.source == ShortcutSource.USER_OVERRIDE,
+            ) {
+                Text("Reset")
+            }
+        }
     }
+}
+
+@Composable
+private fun ShortcutCaptureDialog(
+    actionId: ActionId,
+    onCancel: () -> Unit,
+    onShortcutCaptured: (io.github.dawciobiel.quickfile.app.keymap.Shortcut) -> Unit,
+    onUnsupportedShortcut: (String) -> Unit,
+) {
+    val focusRequester = remember(actionId) { FocusRequester() }
+
+    LaunchedEffect(actionId) {
+        focusRequester.requestFocus()
+    }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Edit Shortcut") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Action: ${actionId.displayName}")
+                Text("Press the new shortcut now. Press Escape to cancel.")
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                            .focusable()
+                            .onPreviewKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown) {
+                                    return@onPreviewKeyEvent false
+                                }
+
+                                if (event.key == androidx.compose.ui.input.key.Key.Escape) {
+                                    onCancel()
+                                    return@onPreviewKeyEvent true
+                                }
+
+                                val shortcut = AppKeymap.shortcutFrom(event)
+                                if (shortcut == null) {
+                                    onUnsupportedShortcut(AppKeymap.shortcutLabel(event.key))
+                                } else {
+                                    onShortcutCaptured(shortcut)
+                                }
+                                true
+                            }
+                            .border(width = 1.dp, color = Color(0xFFD1D5DB))
+                            .background(Color(0xFFF9FAFB))
+                            .padding(12.dp),
+                ) {
+                    Text(
+                        text = "Focus is here. Press a key combination to assign it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onCancel) {
+                Text("Close")
+            }
+        },
+    )
 }
 
 @Composable

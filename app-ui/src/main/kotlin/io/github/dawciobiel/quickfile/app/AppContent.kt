@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -368,10 +370,12 @@ private fun PanelCard(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
-            Text(
-                text = state.currentLocation,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            BreadcrumbBar(
+                location = state.currentLocation,
+                onOpenLocation = { location ->
+                    onActivate()
+                    component.onIntent(PanelIntent.OpenLocation(location))
+                },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextField(
@@ -455,6 +459,41 @@ private fun PanelCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun BreadcrumbBar(
+    location: String,
+    onOpenLocation: (String) -> Unit,
+) {
+    val breadcrumbParts = remember(location) { buildBreadcrumbParts(location) }
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF9FAFB))
+                .border(width = 1.dp, color = Color(0xFFE5E7EB))
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        breadcrumbParts.forEachIndexed { index, segment ->
+            Text(
+                text = segment.label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { onOpenLocation(segment.fullPath) },
+            )
+            if (index < breadcrumbParts.lastIndex) {
+                Text(
+                    text = "/",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -711,3 +750,38 @@ private fun java.time.Instant.formatForUi(): String =
         .ofPattern("yyyy-MM-dd HH:mm:ss")
         .withZone(ZoneId.systemDefault())
         .format(this)
+
+private data class BreadcrumbSegment(
+    val label: String,
+    val fullPath: String,
+)
+
+private fun buildBreadcrumbParts(location: String): List<BreadcrumbSegment> {
+    val normalized = location.trim()
+    if (normalized.isBlank()) {
+        return listOf(BreadcrumbSegment(label = "/", fullPath = "/"))
+    }
+
+    val path = runCatching { java.nio.file.Path.of(normalized).normalize() }.getOrNull()
+    if (path == null) {
+        return listOf(BreadcrumbSegment(label = normalized, fullPath = normalized))
+    }
+
+    val segments = mutableListOf<BreadcrumbSegment>()
+    val root = path.root?.toString()
+    if (root != null) {
+        segments += BreadcrumbSegment(label = root, fullPath = root)
+    }
+
+    var current = if (path.isAbsolute) path.root else null
+    path.forEach { part ->
+        current = if (current == null) java.nio.file.Path.of(part.toString()) else current.resolve(part)
+        segments += BreadcrumbSegment(label = part.toString(), fullPath = current.toString())
+    }
+
+    return if (segments.isEmpty()) {
+        listOf(BreadcrumbSegment(label = normalized, fullPath = normalized))
+    } else {
+        segments
+    }
+}

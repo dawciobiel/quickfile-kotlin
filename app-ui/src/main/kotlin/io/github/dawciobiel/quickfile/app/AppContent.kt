@@ -241,10 +241,31 @@ fun AppContent(component: AppComponent) {
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Keymap", style = MaterialTheme.typography.titleLarge)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Keymap", style = MaterialTheme.typography.titleLarge)
+                        OutlinedButton(
+                            onClick = { component.settings.resetAllShortcuts() },
+                            enabled = settingsState.overrideCount > 0,
+                        ) {
+                            Text("Reset All")
+                        }
+                    }
                     Text(
                         text = settingsState.summary,
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text =
+                            if (settingsState.overrideCount == 0) {
+                                "Using bundled defaults for all actions."
+                            } else {
+                                "User overrides active for ${settingsState.overrideCount} action(s)."
+                            },
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(

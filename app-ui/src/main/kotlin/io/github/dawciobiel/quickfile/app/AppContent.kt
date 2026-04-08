@@ -291,6 +291,33 @@ fun AppContent(component: AppComponent) {
                     }
                 }
             }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Shortcuts", style = MaterialTheme.typography.titleLarge)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_SWITCH), label = "Switch panel")
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_OPEN_SELECTED), label = "Open")
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_NAVIGATE_UP), label = "Up")
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_SELECT_PREVIOUS), label = "Prev")
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_SELECT_NEXT), label = "Next")
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_COPY), label = "Copy")
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_MOVE), label = "Move")
+                        ShortcutHintChip(shortcut = shortcutLabel(ActionId.PANEL_DELETE), label = "Delete")
+                    }
+                }
+            }
         }
     }
 
@@ -322,6 +349,26 @@ fun AppContent(component: AppComponent) {
             onUnsupportedShortcut = { keyLabel ->
                 component.settings.showUnsupportedShortcut(keyLabel)
             },
+        )
+    }
+}
+
+@Composable
+private fun ShortcutHintChip(
+    shortcut: String,
+    label: String,
+) {
+    Box(
+        modifier =
+            Modifier
+                .background(Color(0xFFF9FAFB))
+                .border(width = 1.dp, color = Color(0xFFE5E7EB))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = "$shortcut · $label",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

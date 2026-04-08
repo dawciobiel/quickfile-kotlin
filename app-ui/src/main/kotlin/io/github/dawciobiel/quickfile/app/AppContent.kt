@@ -46,6 +46,8 @@ import io.github.dawciobiel.quickfile.app.component.AppComponent
 import io.github.dawciobiel.quickfile.app.component.JobsFilter
 import io.github.dawciobiel.quickfile.app.keymap.ActionId
 import io.github.dawciobiel.quickfile.app.keymap.AppKeymap
+import io.github.dawciobiel.quickfile.app.keymap.KeyBindingView
+import io.github.dawciobiel.quickfile.app.keymap.ShortcutSource
 import io.github.dawciobiel.quickfile.core.errors.BrowseError
 import io.github.dawciobiel.quickfile.core.jobs.JobSnapshot
 import io.github.dawciobiel.quickfile.core.jobs.JobStatus
@@ -63,6 +65,7 @@ fun AppContent(component: AppComponent) {
     val pendingConfirmation by component.pendingConfirmation.collectAsState()
     val leftPanelState by component.leftPanel.state.collectAsState()
     val rightPanelState by component.rightPanel.state.collectAsState()
+    val settingsState by component.settings.state.collectAsState()
     val activePanelState = if (leftPanelState.isActive) leftPanelState else rightPanelState
     val inactivePanelState = if (leftPanelState.isActive) rightPanelState else leftPanelState
     val hasSelectedEntry = activePanelState.selectedEntryName != null && !activePanelState.isLoading
@@ -228,6 +231,25 @@ fun AppContent(component: AppComponent) {
                     }
                 }
             }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Keymap", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = settingsState.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        settingsState.keyBindings.forEach { binding ->
+                            KeyBindingRow(binding = binding)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -246,6 +268,40 @@ fun AppContent(component: AppComponent) {
                     Text("Cancel")
                 }
             },
+        )
+    }
+}
+
+@Composable
+private fun KeyBindingRow(binding: KeyBindingView) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = binding.actionId.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text =
+                    when (binding.source) {
+                        ShortcutSource.DEFAULT -> "Bundled default shortcut"
+                        ShortcutSource.USER_OVERRIDE -> "User override from keymap.json"
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = binding.shortcut.label(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }

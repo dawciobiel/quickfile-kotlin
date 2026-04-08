@@ -1,12 +1,15 @@
 package io.github.dawciobiel.quickfile.app.component
 
 import com.arkivanov.decompose.ComponentContext
+import io.github.dawciobiel.quickfile.app.keymap.AppKeymap
+import io.github.dawciobiel.quickfile.app.keymap.KeyBindingView
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 data class SettingsState(
     val summary: String,
+    val keyBindings: List<KeyBindingView>,
 )
 
 interface SettingsComponent {
@@ -19,7 +22,8 @@ class DefaultSettingsComponent(
     private val mutableState =
         MutableStateFlow(
             SettingsState(
-                summary = "Settings navigation is reserved for a later milestone.",
+                summary = "Active shortcuts are loaded from the bundled defaults and optional user keymap overrides.",
+                keyBindings = AppKeymap.bindings(),
             ),
         )
 

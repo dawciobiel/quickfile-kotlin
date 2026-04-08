@@ -36,10 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.dawciobiel.quickfile.app.component.AppComponent
 import io.github.dawciobiel.quickfile.app.component.JobsFilter
+import io.github.dawciobiel.quickfile.app.keymap.ActionId
+import io.github.dawciobiel.quickfile.app.keymap.AppKeymap
 import io.github.dawciobiel.quickfile.core.errors.BrowseError
 import io.github.dawciobiel.quickfile.core.jobs.JobSnapshot
 import io.github.dawciobiel.quickfile.core.jobs.JobStatus
@@ -123,19 +122,19 @@ fun AppContent(component: AppComponent) {
                             onClick = { component.copySelectedFromActivePanel() },
                             enabled = hasSelectedEntry,
                         ) {
-                            Text("Copy")
+                            Text("Copy (${AppKeymap.shortcutFor(ActionId.PANEL_COPY).label()})")
                         }
                         OutlinedButton(
                             onClick = { component.moveSelectedFromActivePanel() },
                             enabled = hasSelectedEntry,
                         ) {
-                            Text("Move")
+                            Text("Move (${AppKeymap.shortcutFor(ActionId.PANEL_MOVE).label()})")
                         }
                         OutlinedButton(
                             onClick = { component.deleteSelectedFromActivePanel() },
                             enabled = hasSelectedEntry,
                         ) {
-                            Text("Delete")
+                            Text("Delete (${AppKeymap.shortcutFor(ActionId.PANEL_DELETE).label()})")
                         }
                     }
                 }
@@ -306,53 +305,43 @@ private fun PanelCard(
                             return@onPreviewKeyEvent false
                         }
 
-                        when (event.key) {
-                            Key.Tab -> {
+                        when {
+                            AppKeymap.matches(ActionId.PANEL_SWITCH, event) -> {
                                 onSwitchPanel()
                                 true
                             }
 
-                            Key.C -> {
-                                if (event.isCtrlPressed) {
-                                    onCopy()
-                                    true
-                                } else {
-                                    false
-                                }
+                            AppKeymap.matches(ActionId.PANEL_COPY, event) -> {
+                                onCopy()
+                                true
                             }
 
-                            Key.M -> {
-                                if (event.isCtrlPressed) {
-                                    onMove()
-                                    true
-                                } else {
-                                    false
-                                }
+                            AppKeymap.matches(ActionId.PANEL_MOVE, event) -> {
+                                onMove()
+                                true
                             }
 
-                            Key.Delete -> {
+                            AppKeymap.matches(ActionId.PANEL_DELETE, event) -> {
                                 onDelete()
                                 true
                             }
 
-                            Key.DirectionDown -> {
+                            AppKeymap.matches(ActionId.PANEL_SELECT_NEXT, event) -> {
                                 component.onIntent(PanelIntent.MoveSelection(1))
                                 true
                             }
 
-                            Key.DirectionUp -> {
+                            AppKeymap.matches(ActionId.PANEL_SELECT_PREVIOUS, event) -> {
                                 component.onIntent(PanelIntent.MoveSelection(-1))
                                 true
                             }
 
-                            Key.Enter,
-                            Key.NumPadEnter,
-                            -> {
+                            AppKeymap.matches(ActionId.PANEL_OPEN_SELECTED, event) -> {
                                 component.onIntent(PanelIntent.OpenSelectedEntry)
                                 true
                             }
 
-                            Key.Backspace -> {
+                            AppKeymap.matches(ActionId.PANEL_NAVIGATE_UP, event) -> {
                                 component.onIntent(PanelIntent.NavigateUp)
                                 true
                             }

@@ -1,0 +1,10 @@
+{
+  "panel.switch": { "key": "Tab" },
+  "panel.copy": { "key": "C", "ctrl": true },
+  "panel.move": { "key": "M", "ctrl": true },
+  "panel.delete": { "key": "Delete" },
+  "panel.selectNext": { "key": "DirectionDown" },
+  "panel.selectPrevious": { "key": "DirectionUp" },
+  "panel.openSelected": { "key": "Enter" },
+  "panel.navigateUp": { "key": "Backspace" }
+}

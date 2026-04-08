@@ -6,6 +6,8 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.nio.file.Files
+import java.nio.file.Path
 
 enum class ActionId(
     val configKey: String,
@@ -50,8 +52,10 @@ object AppKeymap {
     private val json = Json { ignoreUnknownKeys = true }
 
     private val shortcuts: Map<ActionId, Shortcut> =
-        loadFromResource("/default-keymap.json")
-            ?.takeIf { loaded -> loaded.keys.containsAll(ActionId.entries) }
+        loadDefaultShortcuts()
+            ?.let { defaults ->
+                defaults + loadUserOverrides(userKeymapPath())
+            }?.takeIf { loaded -> loaded.keys.containsAll(ActionId.entries) }
             ?: fallbackShortcuts()
 
     fun shortcutFor(actionId: ActionId): Shortcut = requireNotNull(shortcuts[actionId])
@@ -61,22 +65,58 @@ object AppKeymap {
         event: KeyEvent,
     ): Boolean = shortcutFor(actionId).matches(event)
 
-    private fun loadFromResource(resourcePath: String): Map<ActionId, Shortcut>? {
-        val rawJson =
-            AppKeymap::class.java.getResourceAsStream(resourcePath)
-                ?.bufferedReader()
-                ?.use { it.readText() }
-                ?: return null
+    private fun loadDefaultShortcuts(): Map<ActionId, Shortcut>? =
+        AppKeymap::class.java.getResourceAsStream("/default-keymap.json")
+            ?.bufferedReader()
+            ?.use { it.readText() }
+            ?.let(::parseShortcutMap)
 
-        return runCatching {
-            json
-                .decodeFromString<Map<String, ShortcutConfig>>(rawJson)
-                .mapNotNull { (actionKey, config) ->
-                    val actionId = ActionId.fromConfigKey(actionKey) ?: return@mapNotNull null
-                    val key = config.key.toComposeKey() ?: return@mapNotNull null
-                    actionId to Shortcut(key = key, ctrl = config.ctrl)
-                }.toMap()
-        }.getOrNull()
+    private fun loadUserOverrides(path: Path): Map<ActionId, Shortcut> {
+        if (!Files.exists(path)) {
+            return emptyMap()
+        }
+
+        return runCatching { Files.readString(path) }
+            .map(::parseShortcutMap)
+            .getOrNull()
+            ?: emptyMap()
+    }
+
+    private fun parseShortcutMap(rawJson: String): Map<ActionId, Shortcut> {
+        return json
+            .decodeFromString<Map<String, ShortcutConfig>>(rawJson)
+            .mapNotNull { (actionKey, config) ->
+                val actionId = ActionId.fromConfigKey(actionKey) ?: return@mapNotNull null
+                val key = config.key.toComposeKey() ?: return@mapNotNull null
+                actionId to Shortcut(key = key, ctrl = config.ctrl)
+            }.toMap()
+    }
+
+    private fun userKeymapPath(): Path {
+        val userHome = Path.of(System.getProperty("user.home"))
+        val osName = System.getProperty("os.name").lowercase()
+
+        return when {
+            osName.contains("win") -> {
+                val appData = System.getenv("APPDATA") ?: userHome.resolve("AppData/Roaming").toString()
+                Path.of(appData).resolve("QuickFile").resolve("keymap.json")
+            }
+
+            osName.contains("mac") -> {
+                userHome.resolve("Library/Application Support/QuickFile/keymap.json")
+            }
+
+            else -> {
+                val xdgConfigHome = System.getenv("XDG_CONFIG_HOME")
+                val base =
+                    if (xdgConfigHome.isNullOrBlank()) {
+                        userHome.resolve(".config")
+                    } else {
+                        Path.of(xdgConfigHome)
+                    }
+                base.resolve("quickfile/keymap.json")
+            }
+        }
     }
 
     private fun fallbackShortcuts(): Map<ActionId, Shortcut> =

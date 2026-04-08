@@ -14,6 +14,7 @@ data class SettingsState(
     val summary: String,
     val keymapPath: String,
     val keyBindings: List<KeyBindingView>,
+    val overrideCount: Int,
     val editingActionId: ActionId? = null,
     val message: String? = null,
 )
@@ -30,6 +31,8 @@ interface SettingsComponent {
     fun showUnsupportedShortcut(keyLabel: String)
 
     fun resetShortcut(actionId: ActionId)
+
+    fun resetAllShortcuts()
 }
 
 class DefaultSettingsComponent(
@@ -41,6 +44,7 @@ class DefaultSettingsComponent(
                 summary = "Active shortcuts are loaded from the bundled defaults and optional user keymap overrides.",
                 keymapPath = AppKeymap.keymapPathString(),
                 keyBindings = AppKeymap.bindings(),
+                overrideCount = AppKeymap.userOverrideCount(),
             ),
         )
 
@@ -69,6 +73,7 @@ class DefaultSettingsComponent(
                 mutableState.value =
                     mutableState.value.copy(
                         keyBindings = AppKeymap.bindings(),
+                        overrideCount = AppKeymap.userOverrideCount(),
                         editingActionId = null,
                         message = "Saved ${actionId.displayName.lowercase()} as ${shortcut.label()}.",
                     )
@@ -102,8 +107,20 @@ class DefaultSettingsComponent(
         mutableState.value =
             mutableState.value.copy(
                 keyBindings = AppKeymap.bindings(),
+                overrideCount = AppKeymap.userOverrideCount(),
                 editingActionId = null,
                 message = "Reset ${actionId.displayName.lowercase()} to the bundled default.",
+            )
+    }
+
+    override fun resetAllShortcuts() {
+        AppKeymap.resetAllShortcuts()
+        mutableState.value =
+            mutableState.value.copy(
+                keyBindings = AppKeymap.bindings(),
+                overrideCount = AppKeymap.userOverrideCount(),
+                editingActionId = null,
+                message = "Reset all shortcut overrides to the bundled defaults.",
             )
     }
 }

@@ -161,6 +161,8 @@ object AppKeymap {
 
     fun shortcutConfigKey(key: Key): String? = supportedKeyLabels[key]
 
+    fun userOverrideCount(): Int = userOverrides.size
+
     @Synchronized
     fun updateShortcut(
         actionId: ActionId,
@@ -201,6 +203,17 @@ object AppKeymap {
         persistUserOverrides(updatedOverrides)
         userOverrides = updatedOverrides
         shortcuts = defaultShortcuts + userOverrides
+    }
+
+    @Synchronized
+    fun resetAllShortcuts() {
+        if (userOverrides.isEmpty()) {
+            return
+        }
+
+        persistUserOverrides(emptyMap())
+        userOverrides = emptyMap()
+        shortcuts = defaultShortcuts
     }
 
     private fun loadDefaultShortcuts(): Map<ActionId, Shortcut>? =

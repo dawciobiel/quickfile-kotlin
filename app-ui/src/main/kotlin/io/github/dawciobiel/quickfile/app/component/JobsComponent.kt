@@ -125,6 +125,7 @@ class DefaultJobsComponent(
                     when (kind) {
                         OperationKind.COPY -> "Queued copy of $entryName to $destinationLocation."
                         OperationKind.MOVE -> "Queued move of $entryName to $destinationLocation."
+                        OperationKind.RENAME -> "Queued rename of $entryName to $destinationLocation."
                         OperationKind.DELETE -> "Queued delete of $entryName."
                         else -> "Queued ${kind.name.lowercase()} of $entryName."
                     },

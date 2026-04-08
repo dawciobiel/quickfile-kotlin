@@ -32,7 +32,7 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
         if (request.kind !in supportedKinds) {
             responseObserver.onError(
                 Status.UNIMPLEMENTED
-                    .withDescription("Local filesystem provider supports only COPY, MOVE, and DELETE.")
+                    .withDescription("Local filesystem provider supports only COPY, MOVE, RENAME, and DELETE.")
                     .asRuntimeException(),
             )
             return
@@ -79,14 +79,14 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
                 statusUpdate(jobId, JobStatusChanged.Status.STATUS_RUNNING, "${request.kind.describe()} started."),
             )
 
-            destinationRoot?.let(Files::createDirectories)
-            val allItems = sources.flatMap(::collectOperationUnits)
+            destinationRoot?.takeIf { request.kind in setOf(OperationKind.OPERATION_KIND_COPY, OperationKind.OPERATION_KIND_MOVE) }?.let(Files::createDirectories)
+            val allItems = sources.flatMap { sourceRoot -> collectOperationUnits(request.kind, sourceRoot) }
             val totalUnits = allItems.size.toLong().coerceAtLeast(1L)
             var completedUnits = 0L
 
             sources.forEach { sourceRoot ->
                 val destinationBase = destinationRoot?.resolve(sourceRoot.fileName.toString())
-                collectOperationUnits(sourceRoot).forEach { sourcePath ->
+                collectOperationUnits(request.kind, sourceRoot).forEach { sourcePath ->
                     if (cancellationFlag.get()) {
                         responseObserver.onNext(
                             statusUpdate(jobId, JobStatusChanged.Status.STATUS_CANCELLED, "Operation cancelled."),
@@ -96,9 +96,13 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
                     }
 
                     val targetPath =
-                        destinationBase?.resolve(
-                            sourceRoot.relativize(sourcePath).toString(),
-                        )
+                        when (request.kind) {
+                            OperationKind.OPERATION_KIND_RENAME -> destinationRoot
+                            else ->
+                                destinationBase?.resolve(
+                                    sourceRoot.relativize(sourcePath).toString(),
+                                )
+                        }
 
                     executeOperation(
                         kind = request.kind,
@@ -167,8 +171,15 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
         return Path.of(raw).toAbsolutePath().normalize()
     }
 
-    private fun collectOperationUnits(root: Path): List<Path> {
+    private fun collectOperationUnits(
+        kind: OperationKind,
+        root: Path,
+    ): List<Path> {
         require(root.exists()) { "Source does not exist: $root" }
+        if (kind == OperationKind.OPERATION_KIND_RENAME) {
+            return listOf(root)
+        }
+
         return if (root.isDirectory()) {
             Files.walk(root).use { stream -> stream.toList().sortedByDescending { it.nameCount } }
         } else {
@@ -199,6 +210,16 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
 
             OperationKind.OPERATION_KIND_MOVE -> {
                 requireNotNull(targetPath) { "MOVE requires a target path." }
+                targetPath.parent?.let(Files::createDirectories)
+                Files.move(
+                    sourcePath,
+                    targetPath,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            }
+
+            OperationKind.OPERATION_KIND_RENAME -> {
+                requireNotNull(targetPath) { "RENAME requires a target path." }
                 targetPath.parent?.let(Files::createDirectories)
                 Files.move(
                     sourcePath,
@@ -275,6 +296,7 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
         when (kind) {
             OperationKind.OPERATION_KIND_COPY -> "Copied ${sourcePath.fileName} -> $targetPath"
             OperationKind.OPERATION_KIND_MOVE -> "Moved ${sourcePath.fileName} -> $targetPath"
+            OperationKind.OPERATION_KIND_RENAME -> "Renamed ${sourcePath.fileName} -> ${targetPath?.fileName}"
             OperationKind.OPERATION_KIND_DELETE -> "Deleted ${sourcePath.fileName}"
             else -> "Processed ${sourcePath.fileName}"
         }
@@ -284,6 +306,7 @@ class LocalFsFileOperationsService : FileOperationsGrpc.FileOperationsImplBase()
             setOf(
                 OperationKind.OPERATION_KIND_COPY,
                 OperationKind.OPERATION_KIND_MOVE,
+                OperationKind.OPERATION_KIND_RENAME,
                 OperationKind.OPERATION_KIND_DELETE,
             )
     }
@@ -293,6 +316,7 @@ private fun OperationKind.describe(): String =
     when (this) {
         OperationKind.OPERATION_KIND_COPY -> "Copy"
         OperationKind.OPERATION_KIND_MOVE -> "Move"
+        OperationKind.OPERATION_KIND_RENAME -> "Rename"
         OperationKind.OPERATION_KIND_DELETE -> "Delete"
         else -> name.removePrefix("OPERATION_KIND_")
     }
